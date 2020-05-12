@@ -1,0 +1,15 @@
+--- a/IP.pm
++++ b/IP.pm
+@@ -410,12 +410,6 @@
+ 
+     my $int = ip_bintoint($self->binip());
+ 
+-    if (!$int) {
+-        $self->{error} = $ERROR;
+-        $self->{errno} = $ERRNO;
+-        return;
+-    }
+-
+     $self->{intformat} = $int;
+ 
+     return ($int);

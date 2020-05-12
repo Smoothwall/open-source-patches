@@ -1,0 +1,258 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Make files created by amavisd as world-readable
+ The files created by amavisd have to be world-readable so that vipred can
+ read the files made when amavisd checks the email.
+--- a/amavisd
++++ b/amavisd
+@@ -2141,7 +2141,7 @@
+     openlog($current_syslog_ident, LOG_PID | LOG_NDELAY, $syslog_facility_num);
+   } elsif ($logfile_name ne '') {
+     $loghandle = IO::File->new;
+-    $loghandle->open($logfile_name, O_CREAT|O_APPEND|O_WRONLY, 0640)
++    $loghandle->open($logfile_name, O_CREAT|O_APPEND|O_WRONLY, 0644)
+       or die "Failed to open log file $logfile_name: $!";
+     binmode($loghandle,':bytes') or die "Can't cancel :utf8 mode: $!";
+     $loghandle->autoflush(1);
+@@ -3052,7 +3052,7 @@
+     if ($errn == EACCES && !$dir_chmoded) {
+       # relax protection on directory, then try again
+       do_log(3,'rmdir_recursively: enabling read access to directory %s',$dir);
+-      chmod(0750,$dir)
++      chmod(0755,$dir)
+         or do_log(-1, "Can't change protection-1 on dir %s: %s", $dir, $!);
+       $dir_chmoded = 1;
+       $errn = opendir(DIR,$dir) ? 0 : 0+$!;  # try again
+@@ -3067,7 +3067,7 @@
+       if ($errn == EACCES && !$dir_chmoded) {
+         # relax protection on the directory and retry
+         do_log(3,'rmdir_recursively: enabling access to files in dir %s',$dir);
+-        chmod(0750,$dir)
++        chmod(0755,$dir)
+           or do_log(-1, "Can't change protection-2 on dir %s: %s", $dir, $!);
+         $dir_chmoded = 1;
+         $errn = lstat($fname) ? 0 : 0+$!;  # try again
+@@ -3092,7 +3092,7 @@
+         # relax protection on the directory, then try again
+         do_log(3,'rmdir_recursively: enabling write access to dir %s',$dir);
+         my($what) = -l _ ? 'symlink' :-d _ ? 'directory' :'non-regular file';
+-        chmod(0750,$dir)
++        chmod(0755,$dir)
+           or do_log(-1, "Can't change protection-3 on dir %s: %s", $dir, $!);
+         $dir_chmoded = 1;
+         unlink($fname) or die "Can't remove $what $fname: $!";
+@@ -6005,7 +6005,7 @@
+     defined $dname && $dname ne ''
+       or die "Can't create a temporary directory $TEMPBASE/$dirtemplate: $!";
+     do_log(4,"TempDir::prepare_dir: created directory %s", $dname);
+-    chmod(0750,$dname)
++    chmod(0755,$dname)
+       or die "Can't change protection on directory $dname: $!";
+     @stat_list = lstat($dname);
+     @stat_list or die "Failed to access directory $dname: $!";
+@@ -6079,7 +6079,7 @@
+     my($newfh) = IO::File->new;
+     # this can fail if a previous task of this process just recently stumbled
+     # on some error and preserved its evidence, not deleting a file email.txt
+-    $newfh->open($fname, O_CREAT|O_EXCL|O_RDWR, 0640)
++    $newfh->open($fname, O_CREAT|O_EXCL|O_RDWR, 0644)
+       or die "Can't create file $fname: $!";
+     binmode($newfh,':bytes') or die "Can't cancel :utf8 mode on $fname: $!";
+     if (ll(5) && $] >= 5.008001) {  # get_layers was added with Perl 5.8.1
+@@ -8621,7 +8621,7 @@
+       my($newpart) = $newpart_obj->full_name;
+       my($outpart) = IO::File->new;
+       # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-      $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++      $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+         or die "Can't create $pe_name file $newpart: $!";
+       binmode($outpart,':bytes') or die "Can't cancel :utf8 mode: $!";
+       my($len);
+@@ -8924,7 +8924,7 @@
+     my($inp_fh) = $msginfo->mail_text;
+     $inp_fh->seek($msginfo->skip_bytes, 0) or die "Can't rewind mail file: $!";
+     $email_fh = IO::File->new;
+-    $email_fh->open($attachment_email_name, O_CREAT|O_EXCL|O_RDWR, 0640)
++    $email_fh->open($attachment_email_name, O_CREAT|O_EXCL|O_RDWR, 0644)
+       or die "Can't create file $attachment_email_name: $!";
+     binmode($email_fh,':bytes') or die "Can't cancel :utf8 mode: $!";
+     # copy quarantined mail starting at skip_bytes to $attachment_email_name
+@@ -10850,7 +10850,7 @@
+ ### but before chrooting and dropping privileges
+ #
+ sub post_bind_hook {
+-  umask(0027);  # restore our preferred umask
++  umask(0022);  # restore our preferred umask
+   set_sockets_access()  if defined $warm_restart && !$warm_restart;
+ }
+ 
+@@ -11941,7 +11941,7 @@
+     { my($tempdir) = $msginfo->mail_tempdir;
+       my($errn) = lstat("$tempdir/parts") ? 0 : 0+$!;
+       if ($errn == ENOENT) {  # needs to be created
+-        mkdir("$tempdir/parts", 0750)
++        mkdir("$tempdir/parts", 0755)
+           or die "Can't create directory $tempdir/parts: $!";
+         section_time('mkdir parts'); }
+       elsif ($errn != 0) { die "$tempdir/parts is not accessible: $!" }
+@@ -14125,7 +14125,7 @@
+         $inp_fh->seek($msginfo->skip_bytes, 0)
+           or die "Can't rewind mail file: $!";
+         $out_fh = IO::File->new;
+-        $out_fh->open($repl_fn, O_CREAT|O_EXCL|O_WRONLY, 0640)
++        $out_fh->open($repl_fn, O_CREAT|O_EXCL|O_WRONLY, 0644)
+           or die "Can't create file $repl_fn: $!";
+         binmode($out_fh,':bytes') or die "Can't cancel :utf8 mode: $!";
+         if (lc $mail_mangle eq 'anomy' && !$enable_anomy_sanitizer) {
+@@ -15531,7 +15531,7 @@
+ };
+ $Amavis::Conf::log_templ = $Amavis::Conf::log_short_templ;
+ 
+-umask(0027);  # set our preferred umask
++umask(0022);  # set our preferred umask
+ POSIX::setlocale(LC_TIME,"C");  # English dates required in syslog and RFC 5322
+ 
+ # using Net::Server internal mechanism for a restart on HUP
+@@ -16587,7 +16587,7 @@
+     }
+     undef @rmfiles;  # release storage
+   }
+-  $! = 0; my($env) = BerkeleyDB::Env->new(-Home=>$db_home, -Mode=>0640,
++  $! = 0; my($env) = BerkeleyDB::Env->new(-Home=>$db_home, -Mode=>0644,
+     -Flags=> DB_CREATE | DB_INIT_CDB | DB_INIT_MPOOL);
+   defined $env
+     or die "BDB can't create db env. at $db_home: $BerkeleyDB::Error, $!.";
+@@ -16612,7 +16612,7 @@
+   my($class) = @_; my($env);
+   if (defined $db_home) {
+     $! = 0; $env = BerkeleyDB::Env->new(
+-      -Home=>$db_home, -Mode=>0640, -Flags=> DB_INIT_CDB | DB_INIT_MPOOL);
++      -Home=>$db_home, -Mode=>0644, -Flags=> DB_INIT_CDB | DB_INIT_MPOOL);
+     defined $env
+       or die "BDB can't connect db env. at $db_home: $BerkeleyDB::Error, $!.";
+   }
+@@ -20777,7 +20777,7 @@
+       { die "File $bsmtp_file_tmp exists??? Refuse to overwrite it, $!" }
+     $mp = IO::File->new;
+     # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-    $mp->open($bsmtp_file_tmp, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++    $mp->open($bsmtp_file_tmp, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+       or die "Can't create BSMTP file $bsmtp_file_tmp: $!";
+     binmode($mp,':bytes') or die "Can't set :bytes, $!";
+ 
+@@ -21029,7 +21029,7 @@
+           for my $d ('A'..'Z','a'..'z','0'..'9') {
+             $errn = stat("$path$d") ? 0 : 0+$!;
+             if ($errn == ENOENT) {
+-              mkdir("$path$d", 0750) or die "Can't create dir $path$d: $!";
++              mkdir("$path$d", 0755) or die "Can't create dir $path$d: $!";
+             }
+           }
+         }
+@@ -21083,7 +21083,7 @@
+           } else {
+             $mp = IO::File->new;
+             # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-            $mp->open($mbxname, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++            $mp->open($mbxname, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+               or die "Can't create file $mbxname: $!";
+             binmode($mp,':bytes') or die "Can't cancel :utf8 mode: $!";
+           }
+@@ -21095,7 +21095,7 @@
+             # its mail delivery to be retried later by MTA
+             $mp = IO::File->new;
+             # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-            $mp->open($mbxname, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++            $mp->open($mbxname, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+               or die "Can't create file $mbxname: $!";
+           } elsif ($errn==0 && !-f _) {
+             die "Mailbox $mbxname is not a regular file, refuse to deliver";
+@@ -21104,7 +21104,7 @@
+           } else {
+             $mp = IO::File->new;
+             # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-            $mp->open($mbxname, untaint(O_APPEND|O_WRONLY), 0640)
++            $mp->open($mbxname, untaint(O_APPEND|O_WRONLY), 0644)
+               or die "Can't append to $mbxname: $!";
+           }
+           binmode($mp,':bytes') or die "Can't cancel :utf8 mode: $!";
+@@ -23587,7 +23587,7 @@
+     add_entropy(@stat_list);
+     if (!-r _) {  # attempting to gain read access to the file
+       do_log(3,"files_to_scan: attempting to gain read access to %s", $fname);
+-      chmod(0750,untaint($fname))
++      chmod(0755,untaint($fname))
+         or die "files_to_scan: Can't change protection on $fname: $!";
+       $errn = lstat($fname) ? 0 : 0+$!;
+       if ($errn) { die "files_to_scan: file $fname inaccessible: $!" }
+@@ -25456,7 +25456,7 @@
+   do_log(4, 'flatten_and_tidy_dir: processing directory "%s"', $dir);
+   my($consumed_bytes) = 0;
+   my($item_num) = 0; my($parent_placement) = $parent_obj->mime_placement;
+-  chmod(0750, $dir) or die "Can't change protection of \"$dir\": $!";
++  chmod(0755, $dir) or die "Can't change protection of \"$dir\": $!";
+   local(*DIR); opendir(DIR,$dir) or die "Can't open directory \"$dir\": $!";
+   # modifying a directory while traversing it can cause surprises, avoid;
+   # avoid slurping the whole directory contents into memory
+@@ -25490,7 +25490,7 @@
+     } elsif (-z _) {
+       push(@rmfiles, [$fname, 'empty file']);
+     } else {
+-      chmod(0750, $fname)
++      chmod(0755, $fname)
+         or die "Can't change protection of file \"$fname\": $!";
+       my($size) = 0 + (-s _);
+       $newpart_obj->size($size);
+@@ -25843,7 +25843,7 @@
+           $action->safe(1);  # re-establish safe signal handling
+           POSIX::sigaction(SIGALRM,$action) or die "Can't set ALRM handlr: $!";
+         }
+-        chmod(0750, $newpart) or $! == ENOENT  # chmod, don't panic if no file
++        chmod(0755, $newpart) or $! == ENOENT  # chmod, don't panic if no file
+           or die "Can't change protection of \"$newpart\": $!";
+         my($statmsg);
+         my($errn) = lstat($newpart) ? 0 : 0+$!;
+@@ -25939,7 +25939,7 @@
+         my($newpart) = $newpart_obj->full_name;
+         my($outpart) = IO::File->new;
+         # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-        $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++        $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+           or die "Can't create file $newpart: $!";
+         binmode($outpart) or die "Can't set file $newpart to binmode: $!";
+         my($size) = 0;
+@@ -26056,7 +26056,7 @@
+   my($newpart) = $newpart_obj->full_name;
+   my($outpart) = IO::File->new;
+   # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-  $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++  $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+     or die "Can't create file $newpart: $!";
+   binmode($outpart) or die "Can't set file $newpart to binmode: $!";
+   my($nbytes,$buff); my($size) = 0;
+@@ -26310,7 +26310,7 @@
+     } else {
+       snmp_count("OpsDecBy\u${decompressor_name}");
+       # unrar/rar can make a dir by itself, but can't hurt (sparc64 problem?)
+-      mkdir("$tempdir/parts/rar", 0750)
++      mkdir("$tempdir/parts/rar", 0755)
+         or die "Can't mkdir $tempdir/parts/rar: $!";
+       ($proc_fh,$pid) =
+         run_command(undef, '&1', $archiver, qw(x -inul -ver -o- -kb),
+@@ -26700,7 +26700,7 @@
+         my($newpart) = $newpart_obj->full_name;
+         my($outpart) = IO::File->new;
+         # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-        $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)
++        $outpart->open($newpart, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)
+           or die "Can't create file $newpart: $!";
+         binmode($outpart) or die "Can't set file $newpart to binmode: $!";
+         my($filepath) = $dh->path; my($size) = 0;
+@@ -26988,7 +26988,7 @@
+   my($outfile, $ifh, $pid) = @_;
+   my($ofh) = IO::File->new;
+   # O_WRONLY etc. can become tainted in Perl5.8.9 [perlbug #62502]
+-  $ofh->open($outfile, untaint(O_CREAT|O_EXCL|O_WRONLY), 0640)  # calls sysopen
++  $ofh->open($outfile, untaint(O_CREAT|O_EXCL|O_WRONLY), 0644)  # calls sysopen
+     or die "Can't create file $outfile: $!";
+   binmode($ofh) or die "Can't set file $outfile to binmode: $!";
+   binmode($ifh) or die "Can't set binmode on pipe: $!";

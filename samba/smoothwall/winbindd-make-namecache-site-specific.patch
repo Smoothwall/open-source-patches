@@ -1,0 +1,114 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Make namecache site specific
+ When resolving a list of servers in a domain, add the site name to the
+ key when caching the result.
+ .
+ This means there is no need to explicitly clear cache entries when
+ a query is about to be repeated in the context of a different site.
+ This was vulnerable to a race anyway, as another task could repopulate
+ the cache.
+Bug: https://bugzilla.samba.org/show_bug.cgi?id=11928
+---
+Index: samba/source3/libads/ldap.c
+===================================================================
+--- samba.orig/source3/libads/ldap.c	2016-08-09 10:44:25.935609948 +0100
++++ samba/source3/libads/ldap.c	2016-08-09 10:44:47.475868993 +0100
+@@ -519,7 +519,6 @@
+ 				  "our site (%s), "
+ 				  "trying to find another DC\n",
+ 				  sitename));
+-			namecache_delete(c_realm, 0x1C);
+ 			status =
+ 			    resolve_and_ping_dns(ads, NULL, c_realm);
+ 
+Index: samba/source3/libsmb/namequery.c
+===================================================================
+--- samba.orig/source3/libsmb/namequery.c	2016-08-09 10:44:25.935609948 +0100
++++ samba/source3/libsmb/namequery.c	2016-08-09 10:44:25.931609899 +0100
+@@ -2616,6 +2616,7 @@
+ 				int *return_count,
+ 				const char **resolve_order)
+ {
++	char *cache_entry;
+ 	const char *tok;
+ 	NTSTATUS status = NT_STATUS_UNSUCCESSFUL;
+ 	int i;
+@@ -2654,15 +2655,24 @@
+ 		return NT_STATUS_OK;
+ 	}
+ 
++	frame = talloc_stackframe();
++
+ 	/* Check name cache */
+ 
+-	if (namecache_fetch(name, name_type, return_iplist, return_count)) {
++	if (sitename) {
++		cache_entry = talloc_asprintf(frame, "%s\\%s", name, sitename);
++	} else {
++		cache_entry = name;
++	}
++	if (namecache_fetch(cache_entry, name_type, return_iplist, return_count)) {
+ 		*return_count = remove_duplicate_addrs2(*return_iplist,
+ 					*return_count );
+ 		/* This could be a negative response */
+ 		if (*return_count > 0) {
++			TALLOC_FREE(frame);
+ 			return NT_STATUS_OK;
+ 		} else {
++			TALLOC_FREE(frame);
+ 			return NT_STATUS_UNSUCCESSFUL;
+ 		}
+ 	}
+@@ -2671,6 +2681,7 @@
+ 
+ 	if (resolve_order && strcmp(resolve_order[0], "NULL") == 0) {
+ 		DEBUG(8,("internal_resolve_name: all lookups disabled\n"));
++		TALLOC_FREE(frame);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 
+@@ -2681,7 +2692,6 @@
+ 
+ 	/* iterate through the name resolution backends */
+ 
+-	frame = talloc_stackframe();
+ 	for (i=0; resolve_order[i]; i++) {
+ 		tok = resolve_order[i];
+ 
+@@ -2784,7 +2794,7 @@
+ 	}
+ 
+ 	if (*return_count) {
+-		namecache_store(name, name_type, *return_count, *return_iplist);
++		namecache_store(cache_entry, name_type, *return_count, *return_iplist);
+ 	}
+ 
+ 	/* Display some debugging info */
+Index: samba/source3/libsmb/namequery_dc.c
+===================================================================
+--- samba.orig/source3/libsmb/namequery_dc.c	2016-08-09 10:44:25.935609948 +0100
++++ samba/source3/libsmb/namequery_dc.c	2016-08-09 10:44:25.931609899 +0100
+@@ -96,9 +96,6 @@
+ 			TALLOC_FREE(sitename);
+ 			sitename = sitename_fetch(talloc_tos(), realm);
+ 			ads_destroy(&ads);
+-			/* Ensure we don't cache the DC we just connected to. */
+-			namecache_delete(realm, 0x1C);
+-			namecache_delete(domain, 0x1C);
+ 			continue;
+ 		}
+ 
+Index: samba/source3/utils/net_ads.c
+===================================================================
+--- samba.orig/source3/utils/net_ads.c	2016-08-09 10:44:25.935609948 +0100
++++ samba/source3/utils/net_ads.c	2016-08-09 10:44:25.931609899 +0100
+@@ -325,9 +325,6 @@
+ 
+ 		if (!ads_closest_dc(ads)) {
+ 
+-			namecache_delete(ads->server.realm, 0x1C);
+-			namecache_delete(ads->server.workgroup, 0x1C);
+-
+ 			ads_destroy(&ads);
+ 			ads = NULL;
+ 

@@ -1,0 +1,34 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Exit test fatally on list errors
+ Without this, the if the pointers are messed up appropriately, the test can
+ loop until all log space is exhausted. See Debian bug:
+ http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=680100
+--- a/tests/test_stack.c
++++ b/tests/test_stack.c
+@@ -79,14 +79,23 @@
+        p = (list_element *)AO_REAL_NEXT_PTR(p -> next))
+     {
+       if (p -> data > n || p -> data <= 0)
+-        fprintf(stderr, "Found erroneous list element %d\n", p -> data);
++        {
++          fprintf(stderr, "Found erroneous list element %d\n", p -> data);
++          exit(1);
++        }
+       if (marks[p -> data] != 0)
+-        fprintf(stderr, "Found duplicate list element %d\n", p -> data);
++        {
++          fprintf(stderr, "Found duplicate list element %d\n", p -> data);
++          exit(1);
++        }
+       marks[p -> data] = 1;
+     }
+   for (i = 1; i <= n; ++i)
+     if (marks[i] != 1)
+-      fprintf(stderr, "Missing list element %d\n", i);
++      {
++        fprintf(stderr, "Missing list element %d\n", i);
++        exit(1);
++      }
+ }
+      
+ volatile AO_t ops_performed = 0;

@@ -1,0 +1,28 @@
+From b6de2341f8683d51b8723b772e4753507b1607f5 Mon Sep 17 00:00:00 2001
+From: Oliver Skibbe <oliskibbe@gmail.com>
+Date: Thu, 8 Oct 2015 09:04:29 +0200
+Subject: [PATCH] check_smtp.c: modified SSL check for use with -e
+
+  - currently STARTTLS check does not work with -e if there's text
+    like '220 hostname ESMTP*'. This is caused by SMTP answer from
+    host. Postfix answer: 220 2.0.0 Ready to start TLS, Exchange
+    2010: 220 2.0.0 SMTP server ready. This fix checks against 220
+
+    closes #1093
+---
+ plugins/check_smtp.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plugins/check_smtp.c b/plugins/check_smtp.c
+index 2e9b68b..1996c6d 100644
+--- a/plugins/check_smtp.c
++++ b/plugins/check_smtp.c
+@@ -231,7 +231,7 @@ main (int argc, char **argv)
+ 		  send(sd, SMTP_STARTTLS, strlen(SMTP_STARTTLS), 0);
+ 
+ 		  recvlines(buffer, MAX_INPUT_BUFFER); /* wait for it */
+-		  if (!strstr (buffer, server_expect)) {
++		  if (!strstr (buffer, SMTP_EXPECT)) {
+ 		    printf (_("Server does not support STARTTLS\n"));
+ 		    smtp_quit();
+ 		    return STATE_UNKNOWN;

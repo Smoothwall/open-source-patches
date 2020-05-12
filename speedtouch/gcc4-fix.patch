@@ -1,0 +1,37 @@
+Author: Kayvan Javid <kayvan.javid@smoothwall.net>
+Description: Fix compile was failing after gcc4 bump.
+ Error during compile:
+ .
+ modem_run.c:94:12: 
+ error: static declaration of 'verbose' follows non-static declaration
+ .
+ Fix found at: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=298031
+--- tmp/src/modem_run.c	2004-09-29 22:56:31.000000000 +0200
++++ speedtouch-1.3.1/src/modem_run.c	2005-03-04 09:52:25.888179101 +0100
+@@ -91,7 +91,7 @@
+ * Global variables
+ ******************************************************************************/
+ 
+-static int verbose = 0;
++static int verbose_mode = 0;
+ FILE *flog = NULL;
+ 
+ /*****************************************************************************
+@@ -203,7 +203,7 @@
+ 		 } else if (strcmp(argv[i], "-t") == 0 && i+1<argc) {
+ 			 timeout = atoi(argv[++i]);
+ 		 } else if (strcmp(argv[i], "-v") == 0 && i+1<argc) {
+-			 verbose = atoi(argv[++i]);
++			 verbose_mode = atoi(argv[++i]);
+ 		 } else if (strcmp(argv[i],"--help") == 0) {
+ 			 usage();
+ 		 } else if (strcmp(argv[i],"-m") == 0) {
+@@ -1159,7 +1159,7 @@
+ 	char *buffer = NULL;
+ 
+ 
+-	if( verbose >= minlevel ) {
++	if( verbose_mode >= minlevel ) {
+ 		/* if log is null, try to open the log file */
+ 		if(flog == NULL) {
+ 

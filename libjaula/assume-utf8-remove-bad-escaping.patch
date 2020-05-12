@@ -1,0 +1,23 @@
+Description: Interpret string arguments as UTF-8
+ Serialise all bytes >=128 verbatim, so an RFC4627 conforming parser gets
+ the original string. The existing escaping code is incompatible with any
+ Unicode encoding; this is the simplest way to make our output Unicode
+ clean.
+ .
+ Because JSON files can only be in Unicode, this forces us to assume that
+ all input strings contain valid UTF-8. If they don't, a subsequent parser
+ will choke on our output.
+Forwarded: not-needed
+Author: Harry Mason <harry.mason@smoothwall.net>
+Last-Update: 2014-10-24
+--- a/jaula/jaula_value_string.cc
++++ b/jaula/jaula_value_string.cc
+@@ -111,6 +111,8 @@
+         ostr << '\\' << 't';
+       else if (str[i] == ' ')
+         ostr << ' ';
++      else if (str[i] < 0)
++        ostr << str[i];
+       else if (isprint(str[i]))
+         ostr << str[i];
+       else

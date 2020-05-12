@@ -1,0 +1,77 @@
+diff -Nurb chaosreader0.93.old/chaosreader0.94 chaosreader0.93/chaosreader0.94
+--- chaosreader0.93.old/chaosreader0.94	2006-03-23 16:02:50.000000000 +0000
++++ chaosreader0.93/chaosreader0.94	2006-03-23 16:05:28.000000000 +0000
+@@ -1561,7 +1561,7 @@
+ 	 "$length bytes</font></td><td>\n";
+ 
+ 	### Construct text line containing session data
+-	$Index{Text}[$number] .= sprintf("%-4s %-45s %-10s %8s bytes\n",$number,
++	$Index{Text}[$number] .= sprintf("%-4s %-35s %-45s %-10s %8s bytes\n",$number, $starttime,
+ 	 $id_text,"($service_name)",$length);
+ 
+ 	### Construct image info line (in case it is needed)
+@@ -1849,7 +1849,7 @@
+ 
+ 	### Construct text line containing session data
+ 	$id_text = "$ip_src:$udp_src_port <-> $ip_dest:$udp_dest_port";
+-	$Index{Text}[$number] .= sprintf("%-4s %-45s %-10s %8s bytes\n",$number,
++	$Index{Text}[$number] .= sprintf("%-4s %-35s %-45s %-10s %8s bytes\n",$number, $starttime,
+ 	 $id_text,"($service_name)",$length);
+ 
+ 
+@@ -2038,7 +2038,7 @@
+ 
+ 	### Construct text line containing session data
+ 	$id_text = "$ip_src -> $ip_dest";
+-	$Index{Text}[$number] .= sprintf("%-4s %-45s %-10s %8s bytes\n",$number,
++	$Index{Text}[$number] .= sprintf("%-4s %-35s %-45s %-10s %8s bytes\n",$number, $starttime,
+ 	 $id_text, "($icmp_ver $type_name)",$length);
+ 
+ 
+@@ -2640,7 +2640,7 @@
+ 	# --- index.text ---
+ 
+ 	# 
+-	#  Create Text index file
++	#  Create Text index file and Text count file
+ 	#
+ 	open(FILE,">index.text") || die "ERROR23: creating index: $!\n";
+ 	print FILE "TCP/UDP/... Sessions\nFile: $Arg{infile}, "
+@@ -2648,6 +2648,37 @@
+ 	print FILE @{$Index{Text}};
+ 	close FILE;
+ 
++	open(FILE,">count.text") || die "ERROR10: creating count: $!\n";
++	print FILE "\nIP Count\n";
++	foreach $IP (sort {$Count{IP}{$b} <=> $Count{IP}{$a}} 
++	 keys %{$Count{IP}}) {
++		print FILE "$IP  $Count{IP}{$IP}\n";
++	}
++	print FILE "\nTCP Port Count\n";
++	foreach $port (sort {$Count{TCPport}{$b} <=> $Count{TCPport}{$a}} 
++	 keys %{$Count{TCPport}}) {
++		$port_text = $Services_TCP{$port} || $port || "0";
++		print FILE "$port_text  $Count{TCPport}{$port}\n";
++	}
++	print FILE "\nUDP Port Count\n";
++	foreach $port (sort {$Count{UDPport}{$b} <=> $Count{UDPport}{$a}} 
++	 keys %{$Count{UDPport}}) {
++		$port_text = $Services_UDP{$port} || $port || "0";
++		print FILE "$port_text  $Count{UDPport}{$port}\n";
++	}
++	print FILE "\nIP Protocol Count\n";
++	foreach $protocol (sort {$Count{IPprotocol}{$b} <=> 
++	 $Count{IPprotocol}{$a}} keys %{$Count{IPprotocol}}) {
++		$protocol_text = $IP_Protocols{$protocol};
++		print FILE "$protocol_text  $Count{IPprotocol}{$protocol}\n";
++	}
++	print FILE "\nEthernet Type Count\n";
++	foreach $type (sort {$Count{EtherType}{$b} <=> $Count{EtherType}{$a}} 
++	 keys %{$Count{EtherType}}) {
++		print FILE "$type  $Count{EtherType}{$type}\n";
++	}
++	close FILE;
++
+ 
+ 	######################
+ 	# --- image.html ---

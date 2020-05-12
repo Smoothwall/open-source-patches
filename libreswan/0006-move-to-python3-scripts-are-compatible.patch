@@ -1,0 +1,29 @@
+From: Daniel Kahn Gillmor <dkg@fifthhorseman.net>
+Date: Tue, 26 Sep 2017 02:22:31 -0400
+Subject: move to python3 (scripts are compatible)
+
+---
+ programs/show/show.in     | 2 +-
+ programs/verify/verify.in | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/programs/show/show.in b/programs/show/show.in
+index ce962ed..fd7ce7c 100755
+--- a/programs/show/show.in
++++ b/programs/show/show.in
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python
++#!/usr/bin/python3
+ 
+ import sys
+ import os
+diff --git a/programs/verify/verify.in b/programs/verify/verify.in
+index f956ab3..d6851c7 100755
+--- a/programs/verify/verify.in
++++ b/programs/verify/verify.in
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python
++#!/usr/bin/python3
+ #
+ # Copyright (C) 2012 - 2013 Paul Wouters <pwouters@redhat.com>
+ #

@@ -1,0 +1,90 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: use krb5.conf in 'net ads {sid|keytab|status}' calls
+ .
+ These calls do an LDAP bind, which means they must authenticate 
+ to the LDAP server. This requires a Kerberos ticket.
+ Generating the Kerberos configuration also sets the environment up to
+ use it. Without this, the Kerberos libraries will use DNS to find a
+ KDC, which might include broken servers which are in the negative
+ connection cache.
+ .
+ This seems like the incorrect approach, as it leaves a few other
+ calls (that we do not use) broken. A better way would involve a
+ restructure of either this file or ads_connect.
+ .
+ However the same approach is used to fix 'net ads testjoin' in 
+ commit - 475d296065d57f9b38b109203b40ed0b47a2ac7e.
+Index: samba/source3/utils/net_ads.c
+===================================================================
+--- samba.orig/source3/utils/net_ads.c	2016-08-09 11:19:41.414177668 +0100
++++ samba/source3/utils/net_ads.c	2016-08-09 11:19:41.410177627 +0100
+@@ -903,6 +903,8 @@
+ 	ADS_STRUCT *ads;
+ 	ADS_STATUS rc;
+ 	LDAPMessage *res;
++	fstring dc_name;
++	struct sockaddr_storage dcip;
+ 
+ 	if (c->display_usage) {
+ 		d_printf(  "%s\n"
+@@ -913,6 +915,8 @@
+ 		return 0;
+ 	}
+ 
++	get_dc_name(lp_workgroup(), lp_realm(), dc_name, &dcip);
++
+ 	if (!ADS_ERR_OK(ads_startup(c, true, &ads))) {
+ 		return -1;
+ 	}
+@@ -2399,11 +2403,15 @@
+ 	const char **attrs;
+ 	LDAPMessage *res = NULL;
+ 	struct dom_sid sid;
++	fstring dc_name;
++	struct sockaddr_storage dcip;
+ 
+ 	if (argc < 1 || c->display_usage) {
+ 		return net_ads_sid_usage(c, argc, argv);
+ 	}
+ 
++	get_dc_name(lp_workgroup(), lp_realm(), dc_name, &dcip);
++
+ 	if (!ADS_ERR_OK(ads_startup(c, false, &ads))) {
+ 		return -1;
+ 	}
+@@ -2462,6 +2470,8 @@
+ 	int i;
+ 	int ret = 0;
+ 	ADS_STRUCT *ads;
++	fstring dc_name;
++	struct sockaddr_storage dcip;
+ 
+ 	if (c->display_usage) {
+ 		d_printf("%s\n%s",
+@@ -2473,6 +2483,8 @@
+ 		return 0;
+ 	}
+ 
++	get_dc_name(lp_workgroup(), lp_realm(), dc_name, &dcip);
++
+ 	d_printf(_("Processing principals to add...\n"));
+ 	if (!ADS_ERR_OK(ads_startup(c, true, &ads))) {
+ 		return -1;
+@@ -2488,6 +2500,8 @@
+ {
+ 	ADS_STRUCT *ads;
+ 	int ret;
++	fstring dc_name;
++	struct sockaddr_storage dcip;
+ 
+ 	if (c->display_usage) {
+ 		d_printf(  "%s\n"
+@@ -2498,6 +2512,8 @@
+ 		return 0;
+ 	}
+ 
++	get_dc_name(lp_workgroup(), lp_realm(), dc_name, &dcip);
++
+ 	if (!ADS_ERR_OK(ads_startup(c, true, &ads))) {
+ 		return -1;
+ 	}

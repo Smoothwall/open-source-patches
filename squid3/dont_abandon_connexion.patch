@@ -1,0 +1,16 @@
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+Description: Stop Squid abandoning (but not closing) connexion in some
+   should not happen code - but did due to other issues in our patching.
+   And make the case visible at default debug levels.
+--- a/src/client_side.cc
++++ b/src/client_side.cc
+@@ -1613,7 +1613,8 @@
+         conn->readNextRequest();
+     } else {
+         // XXX: Can this happen? CONNECT tunnels have deferredRequest set.
+-        debugs(33, DBG_IMPORTANT, HERE << "abandoning " << conn->clientConnection);
++        debugs(33, DBG_CRITICAL, HERE << "not abandoning " << conn->clientConnection);
++        conn->clientConnection->close();
+     }
+ }
+ 

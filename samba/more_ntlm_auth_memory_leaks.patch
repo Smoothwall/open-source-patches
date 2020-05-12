@@ -1,0 +1,71 @@
+Author: Rebecca Gellman <rebecca.gellman@smoothwall.net>
+Descriptions:
+ Fixes various leaks in the NTLMSSP code path of ntlm_auth.
+ Various calls to data_blob_free() and a couple of talloc_free() seem
+ to be missing, causing small (but significant) memory leaks.
+
+--- a/source3/utils/ntlm_auth.c
++++ b/source3/utils/ntlm_auth.c
+@@ -1355,6 +1355,7 @@
+ 								    &state->gensec_state);
+ 			if (!NT_STATUS_IS_OK(nt_status)) {
+ 				x_fprintf(x_stdout, "BH GENSEC mech failed to start: %s\n", nt_errstr(nt_status));
++				data_blob_free(&in);
+ 				talloc_free(mem_ctx);
+ 				return;
+ 			}
+@@ -1389,6 +1390,7 @@
+ 								    &state->gensec_state);
+ 			if (!NT_STATUS_IS_OK(nt_status)) {
+ 				x_fprintf(x_stdout, "BH GENSEC mech failed to start: %s\n", nt_errstr(nt_status));
++				data_blob_free(&in);
+ 				talloc_free(mem_ctx);
+ 				return;
+ 			}
+@@ -1432,6 +1434,7 @@
+ 		if (!NT_STATUS_IS_OK(nt_status)) {
+ 			DEBUG(1, ("GENSEC mech failed to start: %s\n", nt_errstr(nt_status)));
+ 			x_fprintf(x_stdout, "BH GENSEC mech failed to start\n");
++			data_blob_free(&in);
+ 			talloc_free(mem_ctx);
+ 			return;
+ 		}
+@@ -1461,6 +1464,7 @@
+ 		if(!NT_STATUS_IS_OK(nt_status)) {
+ 			DEBUG(1, ("gensec_session_key failed: %s\n", nt_errstr(nt_status)));
+ 			x_fprintf(x_stdout, "BH No session key\n");
++			data_blob_free(&in);
+ 			talloc_free(mem_ctx);
+ 			return;
+ 		} else {
+@@ -1468,6 +1472,7 @@
+ 			x_fprintf(x_stdout, "GK %s\n", base64_key);
+ 			talloc_free(base64_key);
+ 		}
++		data_blob_free(&in);
+ 		talloc_free(mem_ctx);
+ 		return;
+ 	}
+@@ -1480,10 +1485,14 @@
+ 		neg_flags = gensec_ntlmssp_neg_flags(state->gensec_state);
+ 		if (neg_flags == 0) {
+ 			x_fprintf(x_stdout, "BH\n");
++			data_blob_free(&in);
++			talloc_free(mem_ctx);
+ 			return;
+ 		}
+ 
+ 		x_fprintf(x_stdout, "GF 0x%08x\n", neg_flags);
++		data_blob_free(&in);
++		talloc_free(mem_ctx);
+ 		return;
+ 	}
+ 
+@@ -1564,6 +1573,7 @@
+ 		}
+ 	}
+ 
++	data_blob_free(&in);
+ 	talloc_free(mem_ctx);
+ 	return;
+ }

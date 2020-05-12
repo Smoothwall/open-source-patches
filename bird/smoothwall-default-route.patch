@@ -1,0 +1,19 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Silently ignore Smoothwall's magical default route, BIRD takes it
+ upon itself to be the routing police and ignores it while logging noisily since
+ the destination isn't globally routable.
+--- a/sysdep/linux/netlink.c
++++ b/sysdep/linux/netlink.c
+@@ -847,6 +847,12 @@
+ 	  if (ipa_in_net(ra.gw, IPA_NONE, 96))
+ 	    return;
+ 
++	  /* 0x7F000001 = 127.0.0.1, in host byte order */
++	  if(net->n.prefix == 0 && net->n.pxlen == 0 && ra.gw == 0x7F000001)
++	    {
++	      return;
++	    }
++
+ 	  ng = neigh_find2(&p->p, &ra.gw, ra.iface,
+ 			   (i->rtm_flags & RTNH_F_ONLINK) ? NEF_ONLINK : 0);
+ 	  if (!ng || (ng->scope == SCOPE_HOST))

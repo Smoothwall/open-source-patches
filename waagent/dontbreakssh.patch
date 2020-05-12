@@ -1,0 +1,15 @@
+--- a/config/waagent.conf
++++ b/config/waagent.conf
+@@ -6,10 +6,10 @@
+ Provisioning.Enabled=y
+ 
+ # Password authentication for root account will be unavailable.
+-Provisioning.DeleteRootPassword=y
++Provisioning.DeleteRootPassword=n
+ 
+ # Generate fresh host key pair.
+-Provisioning.RegenerateSshHostKeyPair=y
++Provisioning.RegenerateSshHostKeyPair=n
+ 
+ # Supported values are "rsa", "dsa" and "ecdsa".
+ Provisioning.SshHostKeyPairType=rsa

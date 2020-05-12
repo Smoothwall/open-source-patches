@@ -1,0 +1,50 @@
+--- a/azurelinuxagent/common/osutil/debian.py
++++ b/azurelinuxagent/common/osutil/debian.py
+@@ -31,6 +31,7 @@
+ import azurelinuxagent.common.utils.shellutil as shellutil
+ import azurelinuxagent.common.utils.textutil as textutil
+ from azurelinuxagent.common.osutil.default import DefaultOSUtil
++from datetime import date
+ 
+ class DebianOSUtil(DefaultOSUtil):
+     def __init__(self):
+@@ -56,3 +57,39 @@
+ 
+     def get_dhcp_lease_endpoint(self):
+         return self.get_endpoint_from_leases_path('/var/lib/dhcp/dhclient.leases')
++
++    def get_primary_interface(self):
++        """
++            Open DHCP lease file and work out our primary interface
++            returns interface name if found or None if not found.
++        """
++        with open('/var/lib/dhcp/dhclient.leases', 'r') as leases:
++            for lease_line in leases.readlines():
++
++                # If we are at the beginning of the block
++                if re.match("lease {", lease_line):
++                    interface = 'None'
++
++                # If we are at the end of a lease block
++                elif re.match('}', lease_line):
++                    interface = 'None'
++
++                # If we found an interface in the lease file
++                elif re.match('[\s]+interface', lease_line):
++                    # Get the interface name
++                    interface = re.search('eth[A-Z]', lease_line).group(0)
++
++                # If we found an expiry element in the lease file
++                elif re.match('[\s]+expire', lease_line):
++
++                    # Grab the date in a readable comparable format
++                    expiry = re.search('[0-9]{4}\/[0-9]{2}\/[0-9]{2}', lease_line).group(0)
++
++                    # Ensure the lease hasn't expired and we have a non-empty interface
++                    if expiry > date.today().strftime("%Y/%m/%d") and interface != 'None':
++
++                        # Return the primary interface to the caller
++                        return interface
++
++        # If we've failed to find a usuable interface, return none
++        return 'None'

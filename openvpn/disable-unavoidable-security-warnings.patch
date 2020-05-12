@@ -1,0 +1,66 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Author: Filippo Biondi <filippo.biondi@smoothwall.net>
+Description: Disable panicy, unavoidable warnings.
+ --client-cert-no-required is a non-deprecated feature, but generates a
+ somewhat hostile warning when used that says the feature does what it says it
+ does. We don't really want that in our logs.
+ (Make minimal code change due to hairy interaction of runtime and compile-time
+ conditionals in upstream code.)
+ .
+ Disable the set of notes/warnings one of which is guaranteed to complain about
+ the script-security setting, regardless of its level. We use environment-based
+ password passing to forward the credentials to auth, although the warning for
+ this was masked by the lower-priority warning that scripts were enabled at
+ all.
+
+ Note: 22-03-2016 FB
+ DrPhil's patch has been adjusted and applied to openvpn 2.3.4
+
+index 0dfffd6..09e5fbe 100644
+--- a/src/openvpn/ssl_polarssl.c
++++ b/src/openvpn/ssl_polarssl.c
+@@ -690,9 +690,6 @@ void key_state_ssl_init(struct key_state_ssl *ks_ssl,
+ #if P2MP_SERVER
+       if (session->opt->ssl_flags & SSLF_CLIENT_CERT_NOT_REQUIRED)
+ 	{
+-	  msg (M_WARN, "WARNING: POTENTIALLY DANGEROUS OPTION "
+-	   "--client-cert-not-required may accept clients which do not present "
+-	   "a certificate");
+ 	}
+       else
+ #endif
+diff --git a/src/openvpn/ssl_openssl.c b/src/openvpn/ssl_openssl.c
+index 481600a..1b273fe 100644
+--- a/src/openvpn/ssl_openssl.c
++++ b/src/openvpn/ssl_openssl.c
+@@ -239,9 +239,6 @@ tls_ctx_set_options (struct tls_root_ctx *ctx, unsigned int ssl_flags)
+ #if P2MP_SERVER
+   if (ssl_flags & SSLF_CLIENT_CERT_NOT_REQUIRED)
+     {
+-      msg (M_WARN, "WARNING: POTENTIALLY DANGEROUS OPTION "
+-	  "--client-cert-not-required may accept clients which do not present "
+-	  "a certificate");
+     }
+   else
+ #endif
+diff --git a/src/openvpn/init.c b/src/openvpn/init.c
+index 52d370b..72a14c0 100644
+--- a/src/openvpn/init.c
++++ b/src/openvpn/init.c
+@@ -2486,16 +2486,6 @@ do_option_warnings (struct context *c)
+     msg (M_WARN, "NOTE: --connect-timeout option is not supported on this OS");
+ #endif
+ 
+-  /* If a script is used, print appropiate warnings */
+-  if (o->user_script_used)
+-   {
+-     if (script_security >= SSEC_SCRIPTS)
+-       msg (M_WARN, "NOTE: the current --script-security setting may allow this configuration to call user-defined scripts");
+-     else if (script_security >= SSEC_PW_ENV)
+-       msg (M_WARN, "WARNING: the current --script-security setting may allow passwords to be passed to scripts via environmental variables");
+-     else
+-       msg (M_WARN, "NOTE: starting with " PACKAGE_NAME " 2.1, '--script-security 2' or higher is required to call user-defined scripts or executables");
+-   }
+ }
+ 
+ static void

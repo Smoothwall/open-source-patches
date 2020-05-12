@@ -1,0 +1,77 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Correct MIME boundaries where the last block is removed
+The way blocks are removed are by not writing from the start of the
+block up to the end of it's boundary. This breaks things when the
+last block is removed, as it means the closing block (ending in '--')
+is never written, causing things later in the filtering chain to bail
+saying the mail has bad MIME formatting.
+--- a/mime_alter.c
++++ b/mime_alter.c
+@@ -2901,11 +2901,14 @@
+ 		char *header_ptr=NULL;
+ 		char *original_ptr=NULL;
+ 		char buffer[1024];
++		char *initial_boundary=NULL;
+ 
+ 		MIMEH_set_doubleCR_save(0);
+ 		MIMEH_set_header_longsearch(glb.header_long_search);
+ 		MIMEH_set_doubleCR_save(1);
+ 
++		initial_boundary = BS_top();
++
+ 		DAM LOGGER_log("%s:%d:AM_nullify_attachment_recurse:DEBUG: Reading headers... Iteration %d",FL);
+ 		result = MIMEH_headers_get( hinfo, f );
+ 		if (result != 0)
+@@ -2978,6 +2981,22 @@
+ 		}
+ 
+ 
++		// If we're writing this section, write the MIME boundary
++		// But don't do it if we're on our first iteration as there's no boundary
++		// before the prefix
++		if (regresult != 0 && iteration > 1)
++		{
++			if (initial_boundary == NULL)
++			{
++				LOGGER_log("%s:%d:AM_nullify_attachment: initial boundary is NULL", FL);
++			}
++			else
++			{
++				fprintf(outputfile, "--%s\n", initial_boundary);
++			}
++		}
++
++
+ 		// If we're on our first pass, or we've not found the section/block with the attachment
+ 		//	then write the headers out.
+ 		//
+@@ -3026,15 +3045,26 @@
+ 		{
+ 			int buffer_len = strlen(buffer);
+ 
++			if (BS_cmp( buffer, buffer_len ) == 1) {
++				// So, we have a boundary, but is it a closing boundary?
++				char closing_boundary[1028]; // buffer size is 1024 - worse case is 1028
++				sprintf(closing_boundary, "--%s--", BS_top());
++				// If the buffer contains a closing boundary, write it out.
++				if (strncmp(buffer, closing_boundary, strlen(closing_boundary)) == 0) {
++					fprintf(outputfile, "%s\n\n", closing_boundary);
++					// Consume this boundary and keep going - we should find the next
++					// and then be ready for the next iteration.
++					continue;
++				}
++				break;
++			}
++
+ 			if (regresult != 0)
+ 			{
+ 				bc = fwrite( buffer, sizeof(char), buffer_len, outputfile );
+ 				if (bc != buffer_len) LOGGER_log("%s:%d:AM_nullify_attachment_recurse:ERROR: Wrote %d bytes instead of %d", FL, bc, buffer_len);
+ 			}
+ 
+-			if (BS_cmp( buffer, buffer_len ) == 1) {
+-				break;
+-			}
+ 		} // While ffgets
+ 
+ 		if (FFGET_feof(f)) break;

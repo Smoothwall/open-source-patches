@@ -1,0 +1,14 @@
+Author: Kayvan Javid <kayvan.javid@smoothwall.net>
+Description: Removed the include of a now non-existent kernel header.
+ Namely asm/bitops.h which was included needlessly, as it builds
+ without error without the include.
+--- a/driver/eu_types.h
++++ b/driver/eu_types.h
+@@ -26,7 +26,6 @@
+ #define __EU_TYPES_H__
+ 
+ #include <linux/if_ether.h>
+-#include <asm/bitops.h>
+ #include <linux/types.h>
+ 
+ /**

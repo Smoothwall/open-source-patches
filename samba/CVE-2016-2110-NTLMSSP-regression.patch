@@ -1,0 +1,1853 @@
+From 256f09848913caea3236ee7a5d0086a5906717e7 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Fri, 22 Apr 2016 16:18:24 +0200
+Subject: [PATCH 01/30] s4:gensec_tstream: allow wrapped messages up to a size
+ of 0xfffffff
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11872
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 8704958fb3b212b401a8e7d94fdd9c627adbde0d)
+---
+ source4/auth/gensec/gensec_tstream.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/source4/auth/gensec/gensec_tstream.c b/source4/auth/gensec/gensec_tstream.c
+index 92f4fa6..c828170 100644
+--- a/source4/auth/gensec/gensec_tstream.c
++++ b/source4/auth/gensec/gensec_tstream.c
+@@ -253,7 +253,11 @@ static int tstream_gensec_readv_next_vector(struct tstream_context *unix_stream,
+ 
+ 		msg_len = RIVAL(state->wrapped.hdr, 0);
+ 
+-		if (msg_len > 0x00FFFFFF) {
++		/*
++		 * I got a Windows 2012R2 server responding with
++		 * a message of 0x1b28a33.
++		 */
++		if (msg_len > 0x0FFFFFFF) {
+ 			errno = EMSGSIZE;
+ 			return -1;
+ 		}
+-- 
+1.9.1
+
+
+From 2790b1f017568218f1854f85ce301ccb740737ff Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Fri, 22 Apr 2016 16:31:55 +0200
+Subject: [PATCH 02/30] s3:libads/sasl: allow wrapped messages up to a size of
+ 0xfffffff
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11872
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 795e796658e6da0149c9c00ece7cca4ccc457717)
+---
+ source3/libads/sasl.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/source3/libads/sasl.c b/source3/libads/sasl.c
+index b8d4527..10f63e8 100644
+--- a/source3/libads/sasl.c
++++ b/source3/libads/sasl.c
+@@ -328,7 +328,7 @@ static ADS_STATUS ads_sasl_spnego_gensec_bind(ADS_STRUCT *ads,
+ 		 * arcfour-hmac-md5.
+ 		 */
+ 		ads->ldap.in.min_wrapped = MIN(ads->ldap.out.sig_size, 0x2C);
+-		ads->ldap.in.max_wrapped = max_wrapped;
++		ads->ldap.in.max_wrapped = ADS_SASL_WRAPPING_IN_MAX_WRAPPED;
+ 		status = ads_setup_sasl_wrapping(ads, &ads_sasl_gensec_ops, auth_generic_state->gensec_security);
+ 		if (!ADS_ERR_OK(status)) {
+ 			DEBUG(0, ("ads_setup_sasl_wrapping() failed: %s\n",
+@@ -986,7 +986,7 @@ static ADS_STATUS ads_sasl_gssapi_do_bind(ADS_STRUCT *ads, const gss_name_t serv
+ 
+ 		ads->ldap.out.sig_size = max_msg_size - ads->ldap.out.max_unwrapped;
+ 		ads->ldap.in.min_wrapped = 0x2C; /* taken from a capture with LDAP unbind */
+-		ads->ldap.in.max_wrapped = max_msg_size;
++		ads->ldap.in.max_wrapped = ADS_SASL_WRAPPING_IN_MAX_WRAPPED;
+ 		status = ads_setup_sasl_wrapping(ads, &ads_sasl_gssapi_ops, context_handle);
+ 		if (!ADS_ERR_OK(status)) {
+ 			DEBUG(0, ("ads_setup_sasl_wrapping() failed: %s\n",
+-- 
+1.9.1
+
+
+From d5a662e47b710a05b274c23bc7fcbf9e6c88d92e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 28 Apr 2016 12:58:10 +0200
+Subject: [PATCH 03/30] lib:krb5_wrap:krb5_samba: increase debug level for
+ smb_krb5_get_default_realm_from_ccache().
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11872
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+Reviewed-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+(cherry picked from commit 95b8b020626ba58a77a21e3da804bac2f0cf90b1)
+---
+ lib/krb5_wrap/krb5_samba.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/krb5_wrap/krb5_samba.c b/lib/krb5_wrap/krb5_samba.c
+index 5f0378b..c066c1d 100644
+--- a/lib/krb5_wrap/krb5_samba.c
++++ b/lib/krb5_wrap/krb5_samba.c
+@@ -2388,12 +2388,12 @@ static char *smb_krb5_get_default_realm_from_ccache(TALLOC_CTX *mem_ctx)
+ 		"Trying to read krb5 cache: %s\n",
+ 		krb5_cc_default_name(ctx)));
+ 	if (krb5_cc_default(ctx, &cc)) {
+-		DEBUG(0,("kerberos_get_default_realm_from_ccache: "
++		DEBUG(5,("kerberos_get_default_realm_from_ccache: "
+ 			"failed to read default cache\n"));
+ 		goto out;
+ 	}
+ 	if (krb5_cc_get_principal(ctx, cc, &princ)) {
+-		DEBUG(0,("kerberos_get_default_realm_from_ccache: "
++		DEBUG(5,("kerberos_get_default_realm_from_ccache: "
+ 			"failed to get default principal\n"));
+ 		goto out;
+ 	}
+-- 
+1.9.1
+
+
+From 64eafe403323471515067c2115f7b90f4985f99e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 28 Apr 2016 12:58:33 +0200
+Subject: [PATCH 04/30] s3:librpc:crypto:gse: increase debug level for
+ gse_init_client().
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11872
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+Reviewed-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+(cherry picked from commit b6595037f3fcaafb957d9c08edfb89c72cded987)
+---
+ source3/librpc/crypto/gse.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source3/librpc/crypto/gse.c b/source3/librpc/crypto/gse.c
+index fc31064..82c8085 100644
+--- a/source3/librpc/crypto/gse.c
++++ b/source3/librpc/crypto/gse.c
+@@ -239,7 +239,7 @@ static NTSTATUS gse_init_client(TALLOC_CTX *mem_ctx,
+ 				  GSS_C_NT_USER_NAME,
+ 				  &gse_ctx->server_name);
+ 	if (gss_maj) {
+-		DEBUG(0, ("gss_import_name failed for %s, with [%s]\n",
++		DEBUG(5, ("gss_import_name failed for %s, with [%s]\n",
+ 			  (char *)name_buffer.value,
+ 			  gse_errstr(gse_ctx, gss_maj, gss_min)));
+ 		status = NT_STATUS_INTERNAL_ERROR;
+-- 
+1.9.1
+
+
+From 1672168e6e13130ad98b8513b877c5071a2587ba Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Thu, 28 Apr 2016 12:26:16 +0200
+Subject: [PATCH 05/30] auth/spnego: change log level for 'Failed to setup
+ SPNEGO negTokenInit request: NT_STATUS_INTERNAL_ERROR'
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11872
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 9930bd17f2d39e4be1e125f83f7de489a94ea1d1)
+---
+ auth/gensec/spnego.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/auth/gensec/spnego.c b/auth/gensec/spnego.c
+index 1d4b172..5126952 100644
+--- a/auth/gensec/spnego.c
++++ b/auth/gensec/spnego.c
+@@ -661,7 +661,7 @@ static NTSTATUS gensec_spnego_create_negTokenInit(struct gensec_security *gensec
+ 	talloc_free(spnego_state->sub_sec_security);
+ 	spnego_state->sub_sec_security = NULL;
+ 
+-	DEBUG(1, ("Failed to setup SPNEGO negTokenInit request: %s\n", nt_errstr(nt_status)));
++	DEBUG(10, ("Failed to setup SPNEGO negTokenInit request: %s\n", nt_errstr(nt_status)));
+ 	return nt_status;
+ }
+ 
+-- 
+1.9.1
+
+
+From c06ae7f3e1e9ba5fa82d8d6b0665f2fd7cef2f4a Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Sat, 23 Apr 2016 05:17:25 +0200
+Subject: [PATCH 06/30] auth/spnego: handle broken mechListMIC response from
+ Windows 2000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11870
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 032c2733dea834e2c95178cdd0deb73e7bb13621)
+---
+ auth/gensec/spnego.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/auth/gensec/spnego.c b/auth/gensec/spnego.c
+index 5126952..33a4b46 100644
+--- a/auth/gensec/spnego.c
++++ b/auth/gensec/spnego.c
+@@ -1078,6 +1078,24 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 		}
+ 
+ 		if (spnego.negTokenTarg.mechListMIC.length > 0) {
++			DATA_BLOB *m = &spnego.negTokenTarg.mechListMIC;
++			const DATA_BLOB *r = &spnego.negTokenTarg.responseToken;
++
++			/*
++			 * Windows 2000 has a bug, it repeats the
++			 * responseToken in the mechListMIC field.
++			 */
++			if (m->length == r->length) {
++				int cmp;
++
++				cmp = memcmp(m->data, r->data, m->length);
++				if (cmp == 0) {
++					data_blob_free(m);
++				}
++			}
++		}
++
++		if (spnego.negTokenTarg.mechListMIC.length > 0) {
+ 			if (spnego_state->no_response_expected) {
+ 				spnego_state->needs_mic_check = true;
+ 			}
+-- 
+1.9.1
+
+
+From 1bf9b8a08263e71ac7f354884e8c9a244518140e Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 20 Apr 2016 18:44:21 +0200
+Subject: [PATCH 07/30] auth/ntlmssp: don't require any flags in the
+ ccache_resume code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ntlmssp_client_challenge() already checks for required flags
+before asking winbindd.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11850
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 5041adb6657596399049a33e6a739a040b4df0db)
+---
+ auth/ntlmssp/ntlmssp_client.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/auth/ntlmssp/ntlmssp_client.c b/auth/ntlmssp/ntlmssp_client.c
+index b419615..8b367fc 100644
+--- a/auth/ntlmssp/ntlmssp_client.c
++++ b/auth/ntlmssp/ntlmssp_client.c
+@@ -172,19 +172,14 @@ NTSTATUS gensec_ntlmssp_resume_ccache(struct gensec_security *gensec_security,
+ 
+ 	if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SIGN) {
+ 		gensec_security->want_features |= GENSEC_FEATURE_SIGN;
+-
+-		ntlmssp_state->required_flags |= NTLMSSP_NEGOTIATE_SIGN;
+ 	}
+ 
+ 	if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SEAL) {
+ 		gensec_security->want_features |= GENSEC_FEATURE_SEAL;
+-
+-		ntlmssp_state->required_flags |= NTLMSSP_NEGOTIATE_SIGN;
+-		ntlmssp_state->required_flags |= NTLMSSP_NEGOTIATE_SEAL;
+ 	}
+ 
+-	ntlmssp_state->neg_flags |= ntlmssp_state->required_flags;
+ 	ntlmssp_state->conf_flags = ntlmssp_state->neg_flags;
++	ntlmssp_state->required_flags = 0;
+ 
+ 	if (DEBUGLEVEL >= 10) {
+ 		struct NEGOTIATE_MESSAGE *negotiate = talloc(
+-- 
+1.9.1
+
+
+From d92fa261f8a3e1320309e5c515e4036cff31c0df Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 20 Apr 2016 18:44:21 +0200
+Subject: [PATCH 08/30] auth/ntlmssp: don't require NTLMSSP_SIGN for smb
+ connections
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Enforcement of SMB signing is done at the SMB layer.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11850
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit d97b347d041f9b5c0aa71f35526cbefd56f3500b)
+---
+ auth/ntlmssp/ntlmssp_client.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/auth/ntlmssp/ntlmssp_client.c b/auth/ntlmssp/ntlmssp_client.c
+index 8b367fc..b423f20 100644
+--- a/auth/ntlmssp/ntlmssp_client.c
++++ b/auth/ntlmssp/ntlmssp_client.c
+@@ -843,8 +843,11 @@ NTSTATUS gensec_ntlmssp_client_start(struct gensec_security *gensec_security)
+ 		 * Without this, Windows will not create the master key
+ 		 * that it thinks is only used for NTLMSSP signing and
+ 		 * sealing.  (It is actually pulled out and used directly)
++		 *
++		 * We don't require this here as some servers (e.g. NetAPP)
++		 * doesn't support this.
+ 		 */
+-		ntlmssp_state->required_flags |= NTLMSSP_NEGOTIATE_SIGN;
++		ntlmssp_state->neg_flags |= NTLMSSP_NEGOTIATE_SIGN;
+ 	}
+ 	if (gensec_security->want_features & GENSEC_FEATURE_SIGN) {
+ 		ntlmssp_state->required_flags |= NTLMSSP_NEGOTIATE_SIGN;
+-- 
+1.9.1
+
+
+From be36cbcaf1f2e17301af73051ae7a1ab2dce84ea Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 19 Apr 2016 07:31:50 +0200
+Subject: [PATCH 09/30] s3:libsmb: use password = NULL for anonymous
+ connections
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11858
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 53be47410236ef7c90fe895f49f300e3fe47a8bf)
+---
+ source3/libsmb/cliconnect.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/source3/libsmb/cliconnect.c b/source3/libsmb/cliconnect.c
+index 039fba2..b518ab8 100644
+--- a/source3/libsmb/cliconnect.c
++++ b/source3/libsmb/cliconnect.c
+@@ -1343,6 +1343,17 @@ static struct tevent_req *cli_session_setup_gensec_send(
+ 	talloc_set_destructor(
+ 		state, cli_session_setup_gensec_state_destructor);
+ 
++	if (user == NULL || strlen(user) == 0) {
++		if (pass != NULL && strlen(pass) == 0) {
++			/*
++			 * some callers pass "" as no password
++			 *
++			 * gensec only handles NULL as no password.
++			 */
++			pass = NULL;
++		}
++	}
++
+ 	status = auth_generic_client_prepare(state, &state->auth_generic);
+ 	if (tevent_req_nterror(req, status)) {
+ 		return tevent_req_post(req, ev);
+-- 
+1.9.1
+
+
+From 495a374b65a8932bb1d83b326bcb974c65118760 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 20 Apr 2016 20:09:53 +0200
+Subject: [PATCH 10/30] libcli/smb: fix NULL pointer derreference in
+ smbXcli_session_is_authenticated().
+
+Guenther
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+Reviewed-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+(cherry picked from commit 8e016ffeb01167bb8dec66cf9e4bc8605461c15a)
+---
+ libcli/smb/smbXcli_base.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/libcli/smb/smbXcli_base.c b/libcli/smb/smbXcli_base.c
+index 7bf48c8..193222c 100644
+--- a/libcli/smb/smbXcli_base.c
++++ b/libcli/smb/smbXcli_base.c
+@@ -4945,6 +4945,10 @@ bool smbXcli_session_is_authenticated(struct smbXcli_session *session)
+ {
+ 	const DATA_BLOB *application_key;
+ 
++	if (session == NULL) {
++		return false;
++	}
++
+ 	if (session->conn == NULL) {
+ 		return false;
+ 	}
+-- 
+1.9.1
+
+
+From 9a4ab7a5af1433016240732b1d4e1af48bb982ee Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 18 Apr 2016 17:33:11 +0200
+Subject: [PATCH 11/30] libcli/smb: add smb1cli_session_set_action() helper
+ function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit e6f9e176f2bb0e3e7451ac58e84ff55328219fcd)
+---
+ libcli/smb/smbXcli_base.c | 7 +++++++
+ libcli/smb/smbXcli_base.h | 2 ++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/libcli/smb/smbXcli_base.c b/libcli/smb/smbXcli_base.c
+index 193222c..c55875b 100644
+--- a/libcli/smb/smbXcli_base.c
++++ b/libcli/smb/smbXcli_base.c
+@@ -152,6 +152,7 @@ struct smbXcli_session {
+ 
+ 	struct {
+ 		uint16_t session_id;
++		uint16_t action;
+ 		DATA_BLOB application_key;
+ 		bool protected_key;
+ 	} smb1;
+@@ -5016,6 +5017,12 @@ void smb1cli_session_set_id(struct smbXcli_session *session,
+ 	session->smb1.session_id = session_id;
+ }
+ 
++void smb1cli_session_set_action(struct smbXcli_session *session,
++				uint16_t action)
++{
++	session->smb1.action = action;
++}
++
+ NTSTATUS smb1cli_session_set_session_key(struct smbXcli_session *session,
+ 					 const DATA_BLOB _session_key)
+ {
+diff --git a/libcli/smb/smbXcli_base.h b/libcli/smb/smbXcli_base.h
+index 9a957e2..29edd09 100644
+--- a/libcli/smb/smbXcli_base.h
++++ b/libcli/smb/smbXcli_base.h
+@@ -379,6 +379,8 @@ void smbXcli_session_set_disconnect_expired(struct smbXcli_session *session);
+ uint16_t smb1cli_session_current_id(struct smbXcli_session* session);
+ void smb1cli_session_set_id(struct smbXcli_session* session,
+ 			    uint16_t session_id);
++void smb1cli_session_set_action(struct smbXcli_session *session,
++				uint16_t action);
+ NTSTATUS smb1cli_session_set_session_key(struct smbXcli_session *session,
+ 					 const DATA_BLOB _session_key);
+ NTSTATUS smb1cli_session_protect_session_key(struct smbXcli_session *session);
+-- 
+1.9.1
+
+
+From 7d295b4b481701d0c668a8de20aed1ef4133cf4b Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 18 Apr 2016 17:34:21 +0200
+Subject: [PATCH 12/30] libcli/smb: add SMB1 session setup action flags
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit cceaa61cf064926baca6db4b303d34ea90d40d52)
+---
+ libcli/smb/smb_constants.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/libcli/smb/smb_constants.h b/libcli/smb/smb_constants.h
+index 9b1de50..c7a49ab 100644
+--- a/libcli/smb/smb_constants.h
++++ b/libcli/smb/smb_constants.h
+@@ -276,6 +276,12 @@ enum smb_signing_setting {
+ 	CAP_LARGE_WRITEX | \
+ 	0)
+ 
++/*
++ * The action flags in the SMB session setup response
++ */
++#define SMB_SETUP_GUEST          0x0001
++#define SMB_SETUP_USE_LANMAN_KEY 0x0002
++
+ /* Client-side offline caching policy types */
+ enum csc_policy {
+ 	CSC_POLICY_MANUAL=0,
+-- 
+1.9.1
+
+
+From 2785ec5201f804ee17831e458647baca3c0ded76 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 18 Apr 2016 17:38:46 +0200
+Subject: [PATCH 13/30] libcli/smb: add smbXcli_session_is_guest() helper
+ function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 8f4a4bec089b46bbeb0e0f37bb682acb88702bf2)
+---
+ libcli/smb/smbXcli_base.c | 24 ++++++++++++++++++++++++
+ libcli/smb/smbXcli_base.h |  1 +
+ 2 files changed, 25 insertions(+)
+
+diff --git a/libcli/smb/smbXcli_base.c b/libcli/smb/smbXcli_base.c
+index c55875b..b07fdad 100644
+--- a/libcli/smb/smbXcli_base.c
++++ b/libcli/smb/smbXcli_base.c
+@@ -4942,6 +4942,30 @@ struct smbXcli_session *smbXcli_session_copy(TALLOC_CTX *mem_ctx,
+ 	return session;
+ }
+ 
++bool smbXcli_session_is_guest(struct smbXcli_session *session)
++{
++	if (session == NULL) {
++		return false;
++	}
++
++	if (session->conn == NULL) {
++		return false;
++	}
++
++	if (session->conn->protocol >= PROTOCOL_SMB2_02) {
++		if (session->smb2->session_flags & SMB2_SESSION_FLAG_IS_GUEST) {
++			return true;
++		}
++		return false;
++	}
++
++	if (session->smb1.action & SMB_SETUP_GUEST) {
++		return true;
++	}
++
++	return false;
++}
++
+ bool smbXcli_session_is_authenticated(struct smbXcli_session *session)
+ {
+ 	const DATA_BLOB *application_key;
+diff --git a/libcli/smb/smbXcli_base.h b/libcli/smb/smbXcli_base.h
+index 29edd09..50466b1 100644
+--- a/libcli/smb/smbXcli_base.h
++++ b/libcli/smb/smbXcli_base.h
+@@ -371,6 +371,7 @@ struct smbXcli_session *smbXcli_session_create(TALLOC_CTX *mem_ctx,
+ 					       struct smbXcli_conn *conn);
+ struct smbXcli_session *smbXcli_session_copy(TALLOC_CTX *mem_ctx,
+ 					       struct smbXcli_session *src);
++bool smbXcli_session_is_guest(struct smbXcli_session *session);
+ bool smbXcli_session_is_authenticated(struct smbXcli_session *session);
+ NTSTATUS smbXcli_session_application_key(struct smbXcli_session *session,
+ 					 TALLOC_CTX *mem_ctx,
+-- 
+1.9.1
+
+
+From 7199058a6fdf26ed0739a3681ddce9f3cf31caee Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 19 Apr 2016 07:19:19 +0200
+Subject: [PATCH 14/30] s3:libsmb: record the session setup action flags
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 02c902103521e5a2b1d221db83e6c59d0ce31099)
+---
+ source3/libsmb/cliconnect.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/source3/libsmb/cliconnect.c b/source3/libsmb/cliconnect.c
+index b518ab8..bad6c28 100644
+--- a/source3/libsmb/cliconnect.c
++++ b/source3/libsmb/cliconnect.c
+@@ -242,6 +242,7 @@ static void cli_session_setup_lanman2_done(struct tevent_req *subreq)
+ 	p = bytes;
+ 
+ 	cli_state_set_uid(state->cli, SVAL(inhdr, HDR_UID));
++	smb1cli_session_set_action(cli->smb1.session, SVAL(vwv+2, 0));
+ 
+ 	status = smb_bytes_talloc_string(cli,
+ 					inhdr,
+@@ -449,6 +450,7 @@ static void cli_session_setup_guest_done(struct tevent_req *subreq)
+ 	p = bytes;
+ 
+ 	cli_state_set_uid(state->cli, SVAL(inhdr, HDR_UID));
++	smb1cli_session_set_action(cli->smb1.session, SVAL(vwv+2, 0));
+ 
+ 	status = smb_bytes_talloc_string(cli,
+ 					inhdr,
+@@ -613,6 +615,7 @@ static void cli_session_setup_plain_done(struct tevent_req *subreq)
+ 	p = bytes;
+ 
+ 	cli_state_set_uid(state->cli, SVAL(inhdr, HDR_UID));
++	smb1cli_session_set_action(cli->smb1.session, SVAL(vwv+2, 0));
+ 
+ 	status = smb_bytes_talloc_string(cli,
+ 					inhdr,
+@@ -929,6 +932,7 @@ static void cli_session_setup_nt1_done(struct tevent_req *subreq)
+ 	p = bytes;
+ 
+ 	cli_state_set_uid(state->cli, SVAL(inhdr, HDR_UID));
++	smb1cli_session_set_action(cli->smb1.session, SVAL(vwv+2, 0));
+ 
+ 	status = smb_bytes_talloc_string(cli,
+ 					inhdr,
+@@ -1178,6 +1182,7 @@ static void cli_sesssetup_blob_done(struct tevent_req *subreq)
+ 	state->inbuf = in;
+ 	inhdr = in + NBT_HDR_SIZE;
+ 	cli_state_set_uid(state->cli, SVAL(inhdr, HDR_UID));
++	smb1cli_session_set_action(cli->smb1.session, SVAL(vwv+2, 0));
+ 
+ 	blob_length = SVAL(vwv+3, 0);
+ 	if (blob_length > num_bytes) {
+-- 
+1.9.1
+
+
+From 947c7f9232a5150bfe53815081aaff90ad5d8621 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 19 Apr 2016 07:20:28 +0200
+Subject: [PATCH 15/30] s3:libsmb: don't finish the gensec handshake for guest
+ logins
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit fa5799207e55ee8e329f36f784d027845eaf0e34)
+---
+ source3/libsmb/cliconnect.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/source3/libsmb/cliconnect.c b/source3/libsmb/cliconnect.c
+index bad6c28..c4ac605 100644
+--- a/source3/libsmb/cliconnect.c
++++ b/source3/libsmb/cliconnect.c
+@@ -1590,6 +1590,27 @@ static void cli_session_setup_gensec_remote_done(struct tevent_req *subreq)
+ 	}
+ 
+ 	if (NT_STATUS_IS_OK(status)) {
++		struct smbXcli_session *session = NULL;
++		bool is_guest = false;
++
++		if (smbXcli_conn_protocol(state->cli->conn) >= PROTOCOL_SMB2_02) {
++			session = state->cli->smb2.session;
++		} else {
++			session = state->cli->smb1.session;
++		}
++
++		is_guest = smbXcli_session_is_guest(session);
++		if (is_guest) {
++			/*
++			 * We can't finish the gensec handshake, we don't
++			 * have a negotiated session key.
++			 *
++			 * So just pretend we are completely done.
++			 */
++			state->blob_in = data_blob_null;
++			state->local_ready = true;
++		}
++
+ 		state->remote_ready = true;
+ 	}
+ 
+-- 
+1.9.1
+
+
+From 4187e7a514392647fa5db841befc728de282112a Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 19 Apr 2016 07:33:03 +0200
+Subject: [PATCH 16/30] s3:libsmb: use anonymous authentication via spnego if
+ possible
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This makes the authentication consistent between
+SMB1 with CAP_EXTENDED_SECURITY (introduced in Windows 2000)
+and SNB2.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11841
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit e72ad193a53e20b769f798d02c0610f91859bd38)
+---
+ source3/libsmb/cliconnect.c | 55 ++++++++++++++++++++++++---------------------
+ 1 file changed, 29 insertions(+), 26 deletions(-)
+
+diff --git a/source3/libsmb/cliconnect.c b/source3/libsmb/cliconnect.c
+index c4ac605..420fe3c 100644
+--- a/source3/libsmb/cliconnect.c
++++ b/source3/libsmb/cliconnect.c
+@@ -1661,6 +1661,19 @@ static void cli_session_setup_gensec_ready(struct tevent_req *req)
+ 		}
+ 	}
+ 
++	if (state->is_anonymous) {
++		/*
++		 * Windows server does not set the
++		 * SMB2_SESSION_FLAG_IS_NULL flag.
++		 *
++		 * This fix makes sure we do not try
++		 * to verify a signature on the final
++		 * session setup response.
++		 */
++		tevent_req_done(req);
++		return;
++	}
++
+ 	status = gensec_session_key(state->auth_generic->gensec_security,
+ 				    state, &state->session_key);
+ 	if (tevent_req_nterror(req, status)) {
+@@ -1670,20 +1683,6 @@ static void cli_session_setup_gensec_ready(struct tevent_req *req)
+ 	if (smbXcli_conn_protocol(state->cli->conn) >= PROTOCOL_SMB2_02) {
+ 		struct smbXcli_session *session = state->cli->smb2.session;
+ 
+-		if (state->is_anonymous) {
+-			/*
+-			 * Windows server does not set the
+-			 * SMB2_SESSION_FLAG_IS_GUEST nor
+-			 * SMB2_SESSION_FLAG_IS_NULL flag.
+-			 *
+-			 * This fix makes sure we do not try
+-			 * to verify a signature on the final
+-			 * session setup response.
+-			 */
+-			tevent_req_done(req);
+-			return;
+-		}
+-
+ 		status = smb2cli_session_set_session_key(session,
+ 							 state->session_key,
+ 							 state->recv_iov);
+@@ -2121,6 +2120,21 @@ struct tevent_req *cli_session_setup_send(TALLOC_CTX *mem_ctx,
+ 		return req;
+ 	}
+ 
++	/*
++	 * if the server supports extended security then use SPNEGO
++	 * even for anonymous connections.
++	 */
++	if (smb1cli_conn_capabilities(cli->conn) & CAP_EXTENDED_SECURITY) {
++		subreq = cli_session_setup_spnego_send(
++			state, ev, cli, user, pass, workgroup);
++		if (tevent_req_nomem(subreq, req)) {
++			return tevent_req_post(req, ev);
++		}
++		tevent_req_set_callback(subreq, cli_session_setup_done_spnego,
++					req);
++		return req;
++	}
++
+ 	/* if no user is supplied then we have to do an anonymous connection.
+ 	   passwords are ignored */
+ 
+@@ -2169,18 +2183,7 @@ struct tevent_req *cli_session_setup_send(TALLOC_CTX *mem_ctx,
+ 		return req;
+ 	}
+ 
+-	/* if the server supports extended security then use SPNEGO */
+-
+-	if (smb1cli_conn_capabilities(cli->conn) & CAP_EXTENDED_SECURITY) {
+-		subreq = cli_session_setup_spnego_send(
+-			state, ev, cli, user, pass, workgroup);
+-		if (tevent_req_nomem(subreq, req)) {
+-			return tevent_req_post(req, ev);
+-		}
+-		tevent_req_set_callback(subreq, cli_session_setup_done_spnego,
+-					req);
+-		return req;
+-	} else {
++	{
+ 		/* otherwise do a NT1 style session setup */
+ 		if (lp_client_ntlmv2_auth() && lp_client_use_spnego()) {
+ 			/*
+-- 
+1.9.1
+
+
+From d960e432ead98a170d34e07602c69c464e7afddc Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Fri, 22 Apr 2016 10:04:38 +0200
+Subject: [PATCH 17/30] auth/spnego: only try to verify the mechListMic if
+ signing was negotiated.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 65462958522baee6eedcedd4193cfcc8cf0f510e)
+---
+ auth/gensec/spnego.c | 18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
+
+diff --git a/auth/gensec/spnego.c b/auth/gensec/spnego.c
+index 33a4b46..1b23427 100644
+--- a/auth/gensec/spnego.c
++++ b/auth/gensec/spnego.c
+@@ -885,6 +885,7 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 	case SPNEGO_SERVER_TARG:
+ 	{
+ 		NTSTATUS nt_status;
++		bool have_sign = true;
+ 		bool new_spnego = false;
+ 
+ 		if (!in.length) {
+@@ -947,18 +948,20 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 			goto server_response;
+ 		}
+ 
++		have_sign = gensec_have_feature(spnego_state->sub_sec_security,
++						GENSEC_FEATURE_SIGN);
+ 		new_spnego = gensec_have_feature(spnego_state->sub_sec_security,
+ 						 GENSEC_FEATURE_NEW_SPNEGO);
+ 		if (spnego.negTokenTarg.mechListMIC.length > 0) {
+ 			new_spnego = true;
+ 		}
+ 
+-		if (new_spnego) {
++		if (have_sign && new_spnego) {
+ 			spnego_state->needs_mic_check = true;
+ 			spnego_state->needs_mic_sign = true;
+ 		}
+ 
+-		if (spnego.negTokenTarg.mechListMIC.length > 0) {
++		if (have_sign && spnego.negTokenTarg.mechListMIC.length > 0) {
+ 			nt_status = gensec_check_packet(spnego_state->sub_sec_security,
+ 							spnego_state->mech_types.data,
+ 							spnego_state->mech_types.length,
+@@ -1142,8 +1145,11 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 		if (spnego_state->no_response_expected &&
+ 		    !spnego_state->done_mic_check)
+ 		{
++			bool have_sign = true;
+ 			bool new_spnego = false;
+ 
++			have_sign = gensec_have_feature(spnego_state->sub_sec_security,
++							GENSEC_FEATURE_SIGN);
+ 			new_spnego = gensec_have_feature(spnego_state->sub_sec_security,
+ 							 GENSEC_FEATURE_NEW_SPNEGO);
+ 
+@@ -1170,16 +1176,12 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 			}
+ 
+ 			if (spnego_state->mic_requested) {
+-				bool sign;
+-
+-				sign = gensec_have_feature(spnego_state->sub_sec_security,
+-							   GENSEC_FEATURE_SIGN);
+-				if (sign) {
++				if (have_sign) {
+ 					new_spnego = true;
+ 				}
+ 			}
+ 
+-			if (new_spnego) {
++			if (have_sign && new_spnego) {
+ 				spnego_state->needs_mic_check = true;
+ 				spnego_state->needs_mic_sign = true;
+ 			}
+-- 
+1.9.1
+
+
+From f73ea5c9d0bb11732a485bb18e96fda1d72d1fdf Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 27 Apr 2016 01:44:56 +0200
+Subject: [PATCH 18/30] s4:auth_anonymous: anonymous authentication doesn't
+ allow a password
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit d247dceaaab24b568425f2360e40f5e91be452cc)
+---
+ source4/auth/ntlm/auth_anonymous.c | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/source4/auth/ntlm/auth_anonymous.c b/source4/auth/ntlm/auth_anonymous.c
+index 28cbfe8..ab1aac2 100644
+--- a/source4/auth/ntlm/auth_anonymous.c
++++ b/source4/auth/ntlm/auth_anonymous.c
+@@ -41,6 +41,36 @@ static NTSTATUS anonymous_want_check(struct auth_method_context *ctx,
+ 		return NT_STATUS_NOT_IMPLEMENTED;
+ 	}
+ 
++	switch (user_info->password_state) {
++	case AUTH_PASSWORD_PLAIN:
++		if (user_info->password.plaintext != NULL &&
++		    strlen(user_info->password.plaintext) > 0)
++		{
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	case AUTH_PASSWORD_HASH:
++		if (user_info->password.hash.lanman != NULL) {
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		if (user_info->password.hash.nt != NULL) {
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	case AUTH_PASSWORD_RESPONSE:
++		if (user_info->password.response.lanman.length == 1) {
++			if (user_info->password.response.lanman.data[0] != '\0') {
++				return NT_STATUS_NOT_IMPLEMENTED;
++			}
++		} else if (user_info->password.response.lanman.length > 1) {
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		if (user_info->password.response.nt.length > 0) {
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	}
++
+ 	return NT_STATUS_OK;
+ }
+ 
+-- 
+1.9.1
+
+
+From df208ed074e6db304d0b8f123e6d0e69f46ad269 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 27 Apr 2016 01:48:32 +0200
+Subject: [PATCH 19/30] s3:auth_builtin: anonymous authentication doesn't allow
+ a password
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit ead483b0c0ec746c0869162024c97f2e08df7f4b)
+---
+ source3/auth/auth_builtin.c | 47 ++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 40 insertions(+), 7 deletions(-)
+
+diff --git a/source3/auth/auth_builtin.c b/source3/auth/auth_builtin.c
+index dce58bf..7480799 100644
+--- a/source3/auth/auth_builtin.c
++++ b/source3/auth/auth_builtin.c
+@@ -38,17 +38,50 @@ static NTSTATUS check_guest_security(const struct auth_context *auth_context,
+ 				     const struct auth_usersupplied_info *user_info,
+ 				     struct auth_serversupplied_info **server_info)
+ {
+-	/* mark this as 'not for me' */
+-	NTSTATUS nt_status = NT_STATUS_NOT_IMPLEMENTED;
+-
+ 	DEBUG(10, ("Check auth for: [%s]\n", user_info->mapped.account_name));
+ 
+-	if (!(user_info->mapped.account_name
+-	      && *user_info->mapped.account_name)) {
+-		nt_status = make_server_info_guest(NULL, server_info);
++	if (user_info->mapped.account_name && *user_info->mapped.account_name) {
++		/* mark this as 'not for me' */
++		return NT_STATUS_NOT_IMPLEMENTED;
+ 	}
+ 
+-	return nt_status;
++	switch (user_info->password_state) {
++	case AUTH_PASSWORD_PLAIN:
++		if (user_info->password.plaintext != NULL &&
++		    strlen(user_info->password.plaintext) > 0)
++		{
++			/* mark this as 'not for me' */
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	case AUTH_PASSWORD_HASH:
++		if (user_info->password.hash.lanman != NULL) {
++			/* mark this as 'not for me' */
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		if (user_info->password.hash.nt != NULL) {
++			/* mark this as 'not for me' */
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	case AUTH_PASSWORD_RESPONSE:
++		if (user_info->password.response.lanman.length == 1) {
++			if (user_info->password.response.lanman.data[0] != '\0') {
++				/* mark this as 'not for me' */
++				return NT_STATUS_NOT_IMPLEMENTED;
++			}
++		} else if (user_info->password.response.lanman.length > 1) {
++			/* mark this as 'not for me' */
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		if (user_info->password.response.nt.length > 0) {
++			/* mark this as 'not for me' */
++			return NT_STATUS_NOT_IMPLEMENTED;
++		}
++		break;
++	}
++
++	return make_server_info_guest(NULL, server_info);
+ }
+ 
+ /* Guest modules initialisation */
+-- 
+1.9.1
+
+
+From aa8ccc2939df6bc477f90c901723e2c829b81b45 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 20 Apr 2016 16:29:42 +0200
+Subject: [PATCH 20/30] libcli/security: implement SECURITY_GUEST
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+SECURITY_GUEST is not exactly the same as SECURITY_ANONYMOUS.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 837e6176329330893d5a1e4ce4ac67dbac758e56)
+---
+ libcli/security/security_token.c | 5 +++++
+ libcli/security/security_token.h | 2 ++
+ libcli/security/session.c        | 4 ++++
+ libcli/security/session.h        | 1 +
+ 4 files changed, 12 insertions(+)
+
+diff --git a/libcli/security/security_token.c b/libcli/security/security_token.c
+index 6812d42..2e5a87b 100644
+--- a/libcli/security/security_token.c
++++ b/libcli/security/security_token.c
+@@ -130,6 +130,11 @@ bool security_token_has_sid_string(const struct security_token *token, const cha
+ 	return ret;
+ }
+ 
++bool security_token_has_builtin_guests(const struct security_token *token)
++{
++	return security_token_has_sid(token, &global_sid_Builtin_Guests);
++}
++
+ bool security_token_has_builtin_administrators(const struct security_token *token)
+ {
+ 	return security_token_has_sid(token, &global_sid_Builtin_Administrators);
+diff --git a/libcli/security/security_token.h b/libcli/security/security_token.h
+index b8ca990..5c5b30b 100644
+--- a/libcli/security/security_token.h
++++ b/libcli/security/security_token.h
+@@ -51,6 +51,8 @@ bool security_token_has_sid(const struct security_token *token, const struct dom
+ 
+ bool security_token_has_sid_string(const struct security_token *token, const char *sid_string);
+ 
++bool security_token_has_builtin_guests(const struct security_token *token);
++
+ bool security_token_has_builtin_administrators(const struct security_token *token);
+ 
+ bool security_token_has_nt_authenticated_users(const struct security_token *token);
+diff --git a/libcli/security/session.c b/libcli/security/session.c
+index 0c32556..0fbb87d 100644
+--- a/libcli/security/session.c
++++ b/libcli/security/session.c
+@@ -38,6 +38,10 @@ enum security_user_level security_session_user_level(struct auth_session_info *s
+ 		return SECURITY_ANONYMOUS;
+ 	}
+ 
++	if (security_token_has_builtin_guests(session_info->security_token)) {
++		return SECURITY_GUEST;
++	}
++
+ 	if (security_token_has_builtin_administrators(session_info->security_token)) {
+ 		return SECURITY_ADMINISTRATOR;
+ 	}
+diff --git a/libcli/security/session.h b/libcli/security/session.h
+index ee9187d..31e950e 100644
+--- a/libcli/security/session.h
++++ b/libcli/security/session.h
+@@ -24,6 +24,7 @@
+ 
+ enum security_user_level {
+ 	SECURITY_ANONYMOUS            = 0,
++	SECURITY_GUEST                = 1,
+ 	SECURITY_USER                 = 10,
+ 	SECURITY_RO_DOMAIN_CONTROLLER = 20,
+ 	SECURITY_DOMAIN_CONTROLLER    = 30,
+-- 
+1.9.1
+
+
+From af588816572e60d88c38ca345745d1370c9998a0 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 18 Apr 2016 17:36:56 +0200
+Subject: [PATCH 21/30] s3:smbd: make use SMB_SETUP_GUEST constant
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 25ce97892ad3ce5028e4dbbbdd844ef6619ac396)
+---
+ source3/smbd/sesssetup.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/source3/smbd/sesssetup.c b/source3/smbd/sesssetup.c
+index 33574f7..1dbc180 100644
+--- a/source3/smbd/sesssetup.c
++++ b/source3/smbd/sesssetup.c
+@@ -286,7 +286,7 @@ static void reply_sesssetup_and_X_spnego(struct smb_request *req)
+ 		}
+ 
+ 		if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
+-			action = 1;
++			action |= SMB_SETUP_GUEST;
+ 		}
+ 
+ 		if (session_info->session_key.length > 0) {
+@@ -412,7 +412,7 @@ static void reply_sesssetup_and_X_spnego(struct smb_request *req)
+ 		}
+ 
+ 		if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
+-			action = 1;
++			action |= SMB_SETUP_GUEST;
+ 		}
+ 
+ 		/*
+@@ -940,7 +940,7 @@ void reply_sesssetup_and_X(struct smb_request *req)
+ 	}
+ 
+ 	if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
+-		action = 1;
++		action |= SMB_SETUP_GUEST;
+ 	}
+ 
+ 	/* register the name and uid as being validated, so further connections
+-- 
+1.9.1
+
+
+From 4e4530282bdbe75c9d27611888548db7c5d00beb Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 20 Apr 2016 16:34:28 +0200
+Subject: [PATCH 22/30] s3:smbd: only mark real guest sessions with the GUEST
+ flag
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Real anonymous sessions don't get it.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(similar to commit 79a71545bfc87525c6ba6c8fe9fa7d8a9da33441)
+---
+ source3/smbd/sesssetup.c      | 6 +++---
+ source3/smbd/smb2_sesssetup.c | 7 ++++---
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/source3/smbd/sesssetup.c b/source3/smbd/sesssetup.c
+index 1dbc180..77b8077 100644
+--- a/source3/smbd/sesssetup.c
++++ b/source3/smbd/sesssetup.c
+@@ -285,7 +285,7 @@ static void reply_sesssetup_and_X_spnego(struct smb_request *req)
+ 			return;
+ 		}
+ 
+-		if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
++		if (security_session_user_level(session_info, NULL) == SECURITY_GUEST) {
+ 			action |= SMB_SETUP_GUEST;
+ 		}
+ 
+@@ -411,7 +411,7 @@ static void reply_sesssetup_and_X_spnego(struct smb_request *req)
+ 			return;
+ 		}
+ 
+-		if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
++		if (security_session_user_level(session_info, NULL) == SECURITY_GUEST) {
+ 			action |= SMB_SETUP_GUEST;
+ 		}
+ 
+@@ -939,7 +939,7 @@ void reply_sesssetup_and_X(struct smb_request *req)
+ 		/* perhaps grab OS version here?? */
+ 	}
+ 
+-	if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
++	if (security_session_user_level(session_info, NULL) == SECURITY_GUEST) {
+ 		action |= SMB_SETUP_GUEST;
+ 	}
+ 
+diff --git a/source3/smbd/smb2_sesssetup.c b/source3/smbd/smb2_sesssetup.c
+index 8b239c9..c738856 100644
+--- a/source3/smbd/smb2_sesssetup.c
++++ b/source3/smbd/smb2_sesssetup.c
+@@ -202,11 +202,12 @@ static NTSTATUS smbd_smb2_auth_generic_return(struct smbXsrv_session *session,
+ 	}
+ 
+ 	if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
+-		/* we map anonymous to guest internally */
+-		*out_session_flags |= SMB2_SESSION_FLAG_IS_GUEST;
+-		*out_session_flags |= SMB2_SESSION_FLAG_IS_NULL;
++		if (security_session_user_level(session_info, NULL) == SECURITY_GUEST) {
++			*out_session_flags |= SMB2_SESSION_FLAG_IS_GUEST;
++		}
+ 		/* force no signing */
+ 		x->global->signing_required = false;
++		/* we map anonymous to guest internally */
+ 		guest = true;
+ 	}
+ 
+-- 
+1.9.1
+
+
+From 209ea55537c2e1141205465116c9d89b32b91dad Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 20 Apr 2016 18:27:34 +0200
+Subject: [PATCH 23/30] auth/ntlmssp: do map to guest checking after the
+ authentication
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11847
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit d667520568996471b55007a42b503edbabb1eee0)
+---
+ auth/ntlmssp/gensec_ntlmssp_server.c | 16 +--------------
+ auth/ntlmssp/ntlmssp_server.c        | 40 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 41 insertions(+), 15 deletions(-)
+
+diff --git a/auth/ntlmssp/gensec_ntlmssp_server.c b/auth/ntlmssp/gensec_ntlmssp_server.c
+index 6147b14..f3c26c7 100644
+--- a/auth/ntlmssp/gensec_ntlmssp_server.c
++++ b/auth/ntlmssp/gensec_ntlmssp_server.c
+@@ -130,21 +130,7 @@ NTSTATUS gensec_ntlmssp_server_start(struct gensec_security *gensec_security)
+ 		ntlmssp_state->allow_lm_key = true;
+ 	}
+ 
+-	if (lpcfg_map_to_guest(gensec_security->settings->lp_ctx) != NEVER_MAP_TO_GUEST) {
+-		/*
+-		 * map to guest is not secure anyway, so
+-		 * try to make it work and don't try to
+-		 * negotiate new_spnego and MIC checking
+-		 */
+-		ntlmssp_state->force_old_spnego = true;
+-	}
+-
+-	if (role == ROLE_ACTIVE_DIRECTORY_DC) {
+-		/*
+-		 * map to guest is not supported on an AD DC.
+-		 */
+-		ntlmssp_state->force_old_spnego = false;
+-	}
++	ntlmssp_state->force_old_spnego = false;
+ 
+ 	ntlmssp_state->neg_flags =
+ 		NTLMSSP_NEGOTIATE_NTLM | NTLMSSP_NEGOTIATE_VERSION;
+diff --git a/auth/ntlmssp/ntlmssp_server.c b/auth/ntlmssp/ntlmssp_server.c
+index 9549641..3f13ccb 100644
+--- a/auth/ntlmssp/ntlmssp_server.c
++++ b/auth/ntlmssp/ntlmssp_server.c
+@@ -31,6 +31,9 @@
+ #include "auth/gensec/gensec.h"
+ #include "auth/gensec/gensec_internal.h"
+ #include "auth/common_auth.h"
++#include "param/param.h"
++#include "param/loadparm.h"
++#include "libcli/security/session.h"
+ 
+ /**
+  * Determine correct target name flags for reply, given server role
+@@ -698,6 +701,7 @@ static NTSTATUS ntlmssp_server_check_password(struct gensec_security *gensec_sec
+ 	struct ntlmssp_state *ntlmssp_state = gensec_ntlmssp->ntlmssp_state;
+ 	struct auth4_context *auth_context = gensec_security->auth_context;
+ 	NTSTATUS nt_status = NT_STATUS_NOT_IMPLEMENTED;
++	struct auth_session_info *session_info = NULL;
+ 	struct auth_usersupplied_info *user_info;
+ 
+ 	user_info = talloc_zero(ntlmssp_state, struct auth_usersupplied_info);
+@@ -734,6 +738,42 @@ static NTSTATUS ntlmssp_server_check_password(struct gensec_security *gensec_sec
+ 
+ 	NT_STATUS_NOT_OK_RETURN(nt_status);
+ 
++	if (lpcfg_map_to_guest(gensec_security->settings->lp_ctx) != NEVER_MAP_TO_GUEST
++	    && auth_context->generate_session_info != NULL)
++	{
++		NTSTATUS tmp_status;
++
++		/*
++		 * We need to check if the auth is anonymous or mapped to guest
++		 */
++		tmp_status = auth_context->generate_session_info(auth_context, mem_ctx,
++								 gensec_ntlmssp->server_returned_info,
++								 gensec_ntlmssp->ntlmssp_state->user,
++								 AUTH_SESSION_INFO_SIMPLE_PRIVILEGES,
++								 &session_info);
++		if (!NT_STATUS_IS_OK(tmp_status)) {
++			/*
++			 * We don't care about failures,
++			 * the worst result is that we try MIC checking
++			 * for a map to guest authentication.
++			 */
++			TALLOC_FREE(session_info);
++		}
++	}
++
++	if (session_info != NULL) {
++		if (security_session_user_level(session_info, NULL) < SECURITY_USER) {
++			/*
++			 * Anonymous and GUEST are not secure anyway.
++			 * avoid new_spnego and MIC checking.
++			 */
++			ntlmssp_state->new_spnego = false;
++			ntlmssp_state->neg_flags &= ~NTLMSSP_NEGOTIATE_SIGN;
++			ntlmssp_state->neg_flags &= ~NTLMSSP_NEGOTIATE_SEAL;
++		}
++		TALLOC_FREE(session_info);
++	}
++
+ 	talloc_steal(mem_ctx, user_session_key->data);
+ 	talloc_steal(mem_ctx, lm_session_key->data);
+ 
+-- 
+1.9.1
+
+
+From 9635bf9f38a98b353d58d9b918021dc306673b2d Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 25 Apr 2016 14:45:55 +0200
+Subject: [PATCH 24/30] auth/spnego: add spnego:simulate_w2k option for testing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit db9c01a51975a0a3ec2564357617958c2f466091)
+---
+ auth/gensec/spnego.c | 28 +++++++++++++++++++++++++++-
+ 1 file changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/auth/gensec/spnego.c b/auth/gensec/spnego.c
+index 1b23427..6a82b5f 100644
+--- a/auth/gensec/spnego.c
++++ b/auth/gensec/spnego.c
+@@ -59,6 +59,8 @@ struct spnego_state {
+ 	bool needs_mic_check;
+ 	bool done_mic_check;
+ 
++	bool simulate_w2k;
++
+ 	/*
+ 	 * The following is used to implement
+ 	 * the update token fragmentation
+@@ -88,6 +90,9 @@ static NTSTATUS gensec_spnego_client_start(struct gensec_security *gensec_securi
+ 	spnego_state->out_max_length = gensec_max_update_size(gensec_security);
+ 	spnego_state->out_status = NT_STATUS_MORE_PROCESSING_REQUIRED;
+ 
++	spnego_state->simulate_w2k = gensec_setting_bool(gensec_security->settings,
++						"spnego", "simulate_w2k", false);
++
+ 	gensec_security->private_data = spnego_state;
+ 	return NT_STATUS_OK;
+ }
+@@ -109,6 +114,9 @@ static NTSTATUS gensec_spnego_server_start(struct gensec_security *gensec_securi
+ 	spnego_state->out_max_length = gensec_max_update_size(gensec_security);
+ 	spnego_state->out_status = NT_STATUS_MORE_PROCESSING_REQUIRED;
+ 
++	spnego_state->simulate_w2k = gensec_setting_bool(gensec_security->settings,
++						"spnego", "simulate_w2k", false);
++
+ 	gensec_security->private_data = spnego_state;
+ 	return NT_STATUS_OK;
+ }
+@@ -775,11 +783,23 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 								     spnego.negTokenInit.mechToken, 
+ 								     &unwrapped_out);
+ 
++			if (spnego_state->simulate_w2k) {
++				/*
++				 * Windows 2000 returns the unwrapped token
++				 * also in the mech_list_mic field.
++				 *
++				 * In order to verify our client code,
++				 * we need a way to have a server with this
++				 * broken behaviour
++				 */
++				mech_list_mic = unwrapped_out;
++			}
++
+ 			nt_status = gensec_spnego_server_negTokenTarg(spnego_state,
+ 								      out_mem_ctx,
+ 								      nt_status,
+ 								      unwrapped_out,
+-								      null_data_blob,
++								      mech_list_mic,
+ 								      out);
+ 
+ 			spnego_free_data(&spnego);
+@@ -950,6 +970,9 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 
+ 		have_sign = gensec_have_feature(spnego_state->sub_sec_security,
+ 						GENSEC_FEATURE_SIGN);
++		if (spnego_state->simulate_w2k) {
++			have_sign = false;
++		}
+ 		new_spnego = gensec_have_feature(spnego_state->sub_sec_security,
+ 						 GENSEC_FEATURE_NEW_SPNEGO);
+ 		if (spnego.negTokenTarg.mechListMIC.length > 0) {
+@@ -1150,6 +1173,9 @@ static NTSTATUS gensec_spnego_update(struct gensec_security *gensec_security, TA
+ 
+ 			have_sign = gensec_have_feature(spnego_state->sub_sec_security,
+ 							GENSEC_FEATURE_SIGN);
++			if (spnego_state->simulate_w2k) {
++				have_sign = false;
++			}
+ 			new_spnego = gensec_have_feature(spnego_state->sub_sec_security,
+ 							 GENSEC_FEATURE_NEW_SPNEGO);
+ 
+-- 
+1.9.1
+
+
+From 178dc27b2fb2a3d11ad026798209c71724e11284 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 25 Apr 2016 15:58:27 +0200
+Subject: [PATCH 25/30] auth/ntlmssp: add
+ ntlmssp_{client,server}:force_old_spnego option for testing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 7a2cb2c97611171613fc677a534277839348c56f)
+---
+ auth/ntlmssp/gensec_ntlmssp_server.c | 7 +++++++
+ auth/ntlmssp/ntlmssp_client.c        | 3 +++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/auth/ntlmssp/gensec_ntlmssp_server.c b/auth/ntlmssp/gensec_ntlmssp_server.c
+index f3c26c7..08a8c8f 100644
+--- a/auth/ntlmssp/gensec_ntlmssp_server.c
++++ b/auth/ntlmssp/gensec_ntlmssp_server.c
+@@ -132,6 +132,13 @@ NTSTATUS gensec_ntlmssp_server_start(struct gensec_security *gensec_security)
+ 
+ 	ntlmssp_state->force_old_spnego = false;
+ 
++	if (gensec_setting_bool(gensec_security->settings, "ntlmssp_server", "force_old_spnego", false)) {
++		/*
++		 * For testing Windows 2000 mode
++		 */
++		ntlmssp_state->force_old_spnego = true;
++	}
++
+ 	ntlmssp_state->neg_flags =
+ 		NTLMSSP_NEGOTIATE_NTLM | NTLMSSP_NEGOTIATE_VERSION;
+ 
+diff --git a/auth/ntlmssp/ntlmssp_client.c b/auth/ntlmssp/ntlmssp_client.c
+index b423f20..5edd5f4 100644
+--- a/auth/ntlmssp/ntlmssp_client.c
++++ b/auth/ntlmssp/ntlmssp_client.c
+@@ -784,6 +784,9 @@ NTSTATUS gensec_ntlmssp_client_start(struct gensec_security *gensec_security)
+ 
+ 	ntlmssp_state->use_ntlmv2 = lpcfg_client_ntlmv2_auth(gensec_security->settings->lp_ctx);
+ 
++	ntlmssp_state->force_old_spnego = gensec_setting_bool(gensec_security->settings,
++						"ntlmssp_client", "force_old_spnego", false);
++
+ 	ntlmssp_state->expected_state = NTLMSSP_INITIAL;
+ 
+ 	ntlmssp_state->neg_flags =
+-- 
+1.9.1
+
+
+From 0d826b092f20dbc70ea48210d41ec300b44d7ca8 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 26 Apr 2016 08:50:00 +0200
+Subject: [PATCH 26/30] selftest:Samba4: provide DC_* variables for fl2000dc
+ and fl2008r2dc
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit b8055cb42cadf48367867213a35635f3391c9b8d)
+---
+ selftest/target/Samba4.pm | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/selftest/target/Samba4.pm b/selftest/target/Samba4.pm
+index 7ea1544..e8d5915 100755
+--- a/selftest/target/Samba4.pm
++++ b/selftest/target/Samba4.pm
+@@ -1154,6 +1154,13 @@ sub provision_fl2000dc($$)
+ 		warn("Unable to add wins configuration");
+ 		return undef;
+ 	}
++	$ret->{DC_SERVER} = $ret->{SERVER};
++	$ret->{DC_SERVER_IP} = $ret->{SERVER_IP};
++	$ret->{DC_SERVER_IPV6} = $ret->{SERVER_IPV6};
++	$ret->{DC_NETBIOSNAME} = $ret->{NETBIOSNAME};
++	$ret->{DC_USERNAME} = $ret->{USERNAME};
++	$ret->{DC_PASSWORD} = $ret->{PASSWORD};
++	$ret->{DC_REALM} = $ret->{REALM};
+ 
+ 	return $ret;
+ }
+@@ -1230,6 +1237,13 @@ sub provision_fl2008r2dc($$)
+ 		warn("Unable to add wins configuration");
+ 		return undef;
+ 	}
++	$ret->{DC_SERVER} = $ret->{SERVER};
++	$ret->{DC_SERVER_IP} = $ret->{SERVER_IP};
++	$ret->{DC_SERVER_IPV6} = $ret->{SERVER_IPV6};
++	$ret->{DC_NETBIOSNAME} = $ret->{NETBIOSNAME};
++	$ret->{DC_USERNAME} = $ret->{USERNAME};
++	$ret->{DC_PASSWORD} = $ret->{PASSWORD};
++	$ret->{DC_REALM} = $ret->{REALM};
+ 
+ 	return $ret;
+ }
+-- 
+1.9.1
+
+
+From be28f570c5da6074d07f6fd3243daa580eb3fef7 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Tue, 26 Apr 2016 11:33:52 +0200
+Subject: [PATCH 27/30] s3:test_smbclient_auth.sh: this script reqiures 5
+ arguments
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(cherry picked from commit 70910334caa176bf98fece7d638ed599979dc173)
+---
+ source3/script/tests/test_smbclient_auth.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source3/script/tests/test_smbclient_auth.sh b/source3/script/tests/test_smbclient_auth.sh
+index 2402f73..18fff75 100755
+--- a/source3/script/tests/test_smbclient_auth.sh
++++ b/source3/script/tests/test_smbclient_auth.sh
+@@ -2,7 +2,7 @@
+ 
+ # this runs the file serving tests that are expected to pass with samba3 against shares with various options
+ 
+-if [ $# -lt 4 ]; then
++if [ $# -lt 5 ]; then
+ cat <<EOF
+ Usage: test_smbclient_auth.sh SERVER SERVER_IP USERNAME PASSWORD SMBCLIENT <smbclient arguments>
+ EOF
+-- 
+1.9.1
+
+
+From 0ec99f370a1a4b02be063a458777fa0d3e81fff7 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Wed, 27 Apr 2016 01:00:14 +0200
+Subject: [PATCH 28/30] selftest:Samba4: let fl2000dc use Windows2000
+ supported_enctypes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(similar to commit 587b5db7979c1ca1055f5bfd81ab79606cd3c2dd)
+---
+ selftest/target/Samba.pm  | 13 +++++++++++++
+ selftest/target/Samba4.pm |  3 +++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/selftest/target/Samba.pm b/selftest/target/Samba.pm
+index dabe442..069b85e 100644
+--- a/selftest/target/Samba.pm
++++ b/selftest/target/Samba.pm
+@@ -204,6 +204,19 @@ sub mk_krb5_conf($$)
+  forwardable = yes
+  allow_weak_crypto = yes
+ 
++";
++
++        if (defined($ctx->{supported_enctypes})) {
++		print KRB5CONF "
++ default_etypes = $ctx->{supported_enctypes}
++ default_as_etypes = $ctx->{supported_enctypes}
++ default_tgs_enctypes = $ctx->{supported_enctypes}
++ default_tkt_enctypes = $ctx->{supported_enctypes}
++ permitted_enctypes = $ctx->{supported_enctypes}
++";
++	}
++
++	print KRB5CONF "
+ [realms]
+  $our_realms_stanza
+  $other_realms_stanza
+diff --git a/selftest/target/Samba4.pm b/selftest/target/Samba4.pm
+index e8d5915..48ff9b8 100755
+--- a/selftest/target/Samba4.pm
++++ b/selftest/target/Samba4.pm
+@@ -282,6 +282,9 @@ sub provision_raw_prepare($$$$$$$$$$)
+ 	$ctx->{swiface} = $swiface;
+ 	$ctx->{password} = $password;
+ 	$ctx->{kdc_ipv4} = $kdc_ipv4;
++	if ($functional_level eq "2000") {
++		$ctx->{supported_enctypes} = "arcfour-hmac-md5 des-cbc-md5 des-cbc-crc"
++	}
+ 
+ #
+ # Set smbd log level here.
+-- 
+1.9.1
+
+
+From 2db8fe86ebb7c5833fe9240a7abb7645ce5a8191 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 25 Apr 2016 16:02:22 +0200
+Subject: [PATCH 29/30] selftest:Samba4: let fl2000dc use Windows2000 style
+ SPNEGO/NTLMSSP
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+(similar to commit 4de43387235cb17a185fdd1afd658972e8c174ef)
+---
+ selftest/target/Samba4.pm | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/selftest/target/Samba4.pm b/selftest/target/Samba4.pm
+index 48ff9b8..48186b1 100755
+--- a/selftest/target/Samba4.pm
++++ b/selftest/target/Samba4.pm
+@@ -1144,6 +1144,10 @@ sub provision_fl2000dc($$)
+ 	my ($self, $prefix) = @_;
+ 
+ 	print "PROVISIONING DC...";
++	my $extra_conf_options = "
++	spnego:simulate_w2k=yes
++	ntlmssp_server:force_old_spnego=yes
++";
+ 	my $ret = $self->provision($prefix,
+ 				   "domain controller",
+ 				   "dc5",
+@@ -1151,7 +1155,7 @@ sub provision_fl2000dc($$)
+ 				   "samba2000.example.com",
+ 				   "2000",
+ 				   "locDCpass5",
+-				   undef, "", "", undef);
++				   undef, $extra_conf_options, "", undef);
+ 
+ 	unless($self->add_wins_config("$prefix/private")) {
+ 		warn("Unable to add wins configuration");
+-- 
+1.9.1
+
+
+From 314eec5def43b12eba026da90af4919f1f1c94e0 Mon Sep 17 00:00:00 2001
+From: Stefan Metzmacher <metze@samba.org>
+Date: Mon, 25 Apr 2016 16:12:47 +0200
+Subject: [PATCH 30/30] s3:selftest: add smbclient_ntlm tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We test all combinations of NT1 with and without spnego and SMB3
+for user, anonymous and guest authentication.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=11849
+
+Signed-off-by: Stefan Metzmacher <metze@samba.org>
+Reviewed-by: Andreas Schneider <asn@samba.org>
+Reviewed-by: Günther Deschner <gd@samba.org>
+
+Autobuild-User(master): Stefan Metzmacher <metze@samba.org>
+Autobuild-Date(master): Thu Apr 28 20:16:45 CEST 2016 on sn-devel-144
+
+(similar to commit eee88e07b3e68efb467b390536eea4155b5ced7e)
+---
+ source3/script/tests/test_smbclient_ntlm.sh | 40 +++++++++++++++++++++++++++++
+ source3/selftest/tests.py                   |  4 ++-
+ 2 files changed, 43 insertions(+), 1 deletion(-)
+ create mode 100755 source3/script/tests/test_smbclient_ntlm.sh
+
+diff --git a/source3/script/tests/test_smbclient_ntlm.sh b/source3/script/tests/test_smbclient_ntlm.sh
+new file mode 100755
+index 0000000..b8fc564
+--- /dev/null
++++ b/source3/script/tests/test_smbclient_ntlm.sh
+@@ -0,0 +1,40 @@
++#!/bin/sh
++
++# this runs a smbclient based authentication tests
++
++if [ $# -lt 5 ]; then
++cat <<EOF
++Usage: test_smbclient_ntlm.sh SERVER USERNAME PASSWORD MAPTOGUEST SMBCLIENT <smbclient arguments>
++EOF
++exit 1;
++fi
++
++SERVER="$1"
++USERNAME="$2"
++PASSWORD="$3"
++MAPTOGUEST="$4"
++SMBCLIENT="$5"
++SMBCLIENT="$VALGRIND ${SMBCLIENT}"
++shift 5
++ADDARGS="$*"
++
++incdir=`dirname $0`/../../../testprogs/blackbox
++. $incdir/subunit.sh
++
++testit "smbclient username.password.NT1OLD" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U$USERNAME%$PASSWORD -mNT1 --option=clientusespnego=no --option=clientntlmv2auth=no -c quit $ADDARGS
++testit "smbclient username.password.NT1NEW" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U$USERNAME%$PASSWORD -mNT1 -c quit $ADDARGS
++testit "smbclient username.password.SMB3" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U$USERNAME%$PASSWORD -mSMB3 -c quit $ADDARGS
++
++testit "smbclient anonymous.nopassword.NT1OLD" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U% -mNT1 --option=clientusespnego=no --option=clientntlmv2auth=no -c quit $ADDARGS
++testit "smbclient anonymous.nopassword.NT1NEW" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U% -mNT1 -c quit $ADDARGS
++testit "smbclient anonymous.nopassword.SMB3" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U% -mSMB3 -c quit $ADDARGS
++if test x"${MAPTOGUEST}" = x"never" ; then
++	testit_expect_failure "smbclient anonymous.badpassword.NT1NEW.fail" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U%badpassword -mNT1 -c quit $ADDARGS
++	testit_expect_failure "smbclient anonymous.badpassword.SMB3.fail" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U%badpassword -mSMB3 -c quit $ADDARGS
++else
++	testit "smbclient anonymous.badpassword.NT1NEW.guest" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U%badpassword -mNT1 -c quit $ADDARGS
++	testit "smbclient anonymous.badpassword.SMB3.guest" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -U%badpassword -mSMB3 -c quit $ADDARGS
++
++	testit "smbclient baduser.badpassword.NT1NEW.guest" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -Ubaduser%badpassword -mNT1 -c quit $ADDARGS
++	testit "smbclient baduser.badpassword.SMB3.guest" $SMBCLIENT //$SERVER/IPC\$ $CONFIGURATION -Ubaduser%badpassword -mSMB3 -c quit $ADDARGS
++fi
+diff --git a/source3/selftest/tests.py b/source3/selftest/tests.py
+index 8b92921..d27595c 100755
+--- a/source3/selftest/tests.py
++++ b/source3/selftest/tests.py
+@@ -128,8 +128,9 @@ for options in ["--option=clientusespnego=no", " --option=clientntlmv2auth=no --
+     env = "s3dc"
+     plantestsuite("samba3.blackbox.smbclient_auth.plain (%s) %s" % (env, options), env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_auth.sh"), '$SERVER', '$SERVER_IP', '$DC_USERNAME', '$DC_PASSWORD', smbclient3, configuration, options])
+ 
+-for env in ["s3dc", "member", "s3member", "dc", "s4member"]:
++for env in ["s3dc", "member", "s3member", "dc", "s4member", "fl2000dc"]:
+     plantestsuite("samba3.blackbox.smbclient_machine_auth.plain (%s:local)" % env, "%s:local" % env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_machine_auth.sh"), '$SERVER', smbclient3, configuration])
++    plantestsuite("samba3.blackbox.smbclient_ntlm.plain (%s)" % env, env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_ntlm.sh"), '$SERVER', '$DC_USERNAME', '$DC_PASSWORD', "never", smbclient3, configuration])
+ 
+ for env in ["s3dc", "member", "s3member"]:
+     plantestsuite("samba3.blackbox.smbclient_auth.plain (%s)" % env, env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_auth.sh"), '$SERVER', '$SERVER_IP', '$DC_USERNAME', '$DC_PASSWORD', smbclient3, configuration])
+@@ -155,6 +156,7 @@ for env in ["maptoguest", "simpleserver"]:
+ 
+ env = "maptoguest"
+ plantestsuite("samba3.blackbox.smbclient_auth.plain (%s) bad username" % env, env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_auth.sh"), '$SERVER', '$SERVER_IP', 'notmy$USERNAME', '$PASSWORD', smbclient3, configuration + " --option=clientntlmv2auth=no --option=clientlanmanauth=yes"])
++plantestsuite("samba3.blackbox.smbclient_ntlm.plain (%s)" % env, env, [os.path.join(samba3srcdir, "script/tests/test_smbclient_ntlm.sh"), '$SERVER', '$USERNAME', '$PASSWORD', "baduser", smbclient3, configuration])
+ 
+ # plain
+ for env in ["s3dc"]:
+-- 
+1.9.1
+

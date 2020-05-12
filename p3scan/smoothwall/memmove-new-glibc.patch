@@ -1,0 +1,14 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.com>
+Description: Switch to memmove when parsing options because overlapping
+ buffers to memcpy has never been part of defined behavior with memcpy.
+--- a/p3scan.c
++++ b/p3scan.c
+@@ -2576,7 +2576,7 @@
+                         rest=line+i+ii+1;
+                         if (rest && strlen(rest)>0 ){
+                            pargv[pargc][strlen(pargv[pargc])]='=';
+-                           memcpy(pargv[pargc]+i+1, rest, strlen(rest)+1); //TODO: Source and destination overlap in memcpy
++                           memmove(pargv[pargc]+i+1, rest, strlen(rest)+1);
+                         }
+                      }
+                   }

@@ -1,0 +1,53 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Rearrange enctypes tried when verifying a ticket against the secrets file
+	We check against the secrets file as samba doesn't have a reliable keytab
+	to decrypt the ticket because we can't be sure if the keytab is updated when
+	the machine account password is. Because of this it will recreate the keys 
+	it needs from the machine account password stored in the secrets file. It
+	does this for each enctype defined in this array and can be a bit of a CPU
+	hog, especially when the most likely enctype for our use is ARCFOUR_HMAC
+	which, before this patch, appeared a few steps down the list.
+	It does this because there's not a publicly accessible API for determining
+	the enctype from a ticket. See source3/libsmb/clikrb5.c for an example of
+	how to find one, but is specific to Heimdal.
+	
+	To maintainers, please think twice before trying to port this patch. It
+	places less secure options before better options which we should probably
+	be using.
+Index: samba/source3/libads/kerberos_keytab.c
+===================================================================
+--- samba.orig/source3/libads/kerberos_keytab.c	2016-08-08 13:39:09.400954604 +0100
++++ samba/source3/libads/kerberos_keytab.c	2016-08-08 13:39:09.400954604 +0100
+@@ -267,6 +267,7 @@
+ 	krb5_data password;
+ 	krb5_kvno kvno;
+         krb5_enctype enctypes[6] = {
++		ENCTYPE_ARCFOUR_HMAC,
+ 		ENCTYPE_DES_CBC_CRC,
+ 		ENCTYPE_DES_CBC_MD5,
+ #ifdef HAVE_ENCTYPE_AES128_CTS_HMAC_SHA1_96
+@@ -275,7 +276,6 @@
+ #ifdef HAVE_ENCTYPE_AES256_CTS_HMAC_SHA1_96
+ 		ENCTYPE_AES256_CTS_HMAC_SHA1_96,
+ #endif
+-		ENCTYPE_ARCFOUR_HMAC,
+ 		0
+ 	};
+ 	char *princ_s = NULL;
+Index: samba/lib/krb5_wrap/enctype_convert.c
+===================================================================
+--- samba.orig/lib/krb5_wrap/enctype_convert.c	2016-08-08 13:39:09.400954604 +0100
++++ samba/lib/krb5_wrap/enctype_convert.c	2016-08-08 13:39:09.400954604 +0100
+@@ -28,11 +28,11 @@
+ {
+ 	/* TODO: Find a way not to have to use a fixed list */
+ 	static const krb5_enctype enctypes[] = {
++		ENCTYPE_ARCFOUR_HMAC,
+ 		ENCTYPE_DES_CBC_CRC,
+ 		ENCTYPE_DES_CBC_MD5,
+ 		ENCTYPE_AES128_CTS_HMAC_SHA1_96,
+ 		ENCTYPE_AES256_CTS_HMAC_SHA1_96,
+-		ENCTYPE_ARCFOUR_HMAC,
+ 		0
+ 	};
+ 	return enctypes;

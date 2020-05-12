@@ -1,0 +1,8 @@
+--- postgrey-1.30/postgrey	2012-04-02 15:52:27.122738237 +0100
++++ postgrey-1.30/postgrey.new	2012-04-02 15:55:12.983783656 +0100
+@@ -1,4 +1,5 @@
+ #!/usr/bin/perl -T -w
++use lib '/modules/zap/usr/lib/perl5/site_perl';
+ 
+ # Postgrey: a Postfix Greylisting Policy Server
+ # Copyright (c) 2004-2007 ETH Zurich

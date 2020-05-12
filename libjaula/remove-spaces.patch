@@ -1,0 +1,48 @@
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+Description: Remove spaces between elements in output
+    to reduce space used and to make easier to compare
+    with Perl JSON output.
+--- a/jaula/jaula_value_array.cc
++++ b/jaula/jaula_value_array.cc
+@@ -65,16 +65,16 @@
+ 
+   void Value_Array::repr(std::ostream &ostr) const
+   {
+-    ostr << "[ ";
++    ostr << "[";
+     for (dataType::const_iterator it = data_.begin()
+       ; (it != data_.end())
+       ; it++)
+     {
+       if (it != data_.begin())
+-        ostr << ", ";
++        ostr << ",";
+       ostr << **it;
+     }
+-    ostr << " ]";
++    ostr << "]";
+   }
+ 
+   bool Value_Array::empty(void) const
+--- a/jaula/jaula_value_object.cc
++++ b/jaula/jaula_value_object.cc
+@@ -66,15 +66,15 @@
+ 
+   void Value_Object::repr(std::ostream &ostr) const
+   {
+-    ostr << "{ ";
++    ostr << "{";
+     for (dataType::const_iterator it = data_.begin(); (it != data_.end()); it++)
+     {
+       if (it != data_.begin())
+-        ostr << ", ";
++        ostr << ",";
+       ostr << Value_String(it->first)
+-         << " : " << *(it->second);
++         << ":" << *(it->second);
+     }
+-    ostr << " }";
++    ostr << "}";
+   }
+ 
+   bool Value_Object::empty(void) const

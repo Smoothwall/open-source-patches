@@ -1,0 +1,32 @@
+diff -Nurb siproxd-0.6.0.orig/src/siproxd.c siproxd-0.6.0/src/siproxd.c
+--- siproxd-0.6.0.orig/src/siproxd.c	2007-06-08 19:42:10.000000000 +0000
++++ siproxd-0.6.0/src/siproxd.c	2009-04-09 13:22:23.000000000 +0000
+@@ -561,7 +561,9 @@
+       DEBUGC(DBCLASS_CONFIG,"deleting PID file [%s]", pidfilename);
+       sts=unlink(pidfilename);
+       if (sts != 0) {
++#if 0
+          WARN("couldn't delete old PID file: %s", strerror(errno));
++#endif
+       }
+    }
+ 
+diff -Nurb siproxd-0.6.0.orig/src/utils.c siproxd-0.6.0/src/utils.c
+--- siproxd-0.6.0.orig/src/utils.c	2007-09-03 19:55:11.000000000 +0000
++++ siproxd-0.6.0/src/utils.c	2009-04-09 13:22:02.000000000 +0000
+@@ -543,11 +543,15 @@
+          fprintf(f,"%i\n",(int)getpid());
+          fclose(f);
+       } else {
++#if 0
+          WARN("couldn't create new PID file: %s", strerror(errno));
++#endif
+          return STS_FAILURE;
+       }
+    } else {
++#if 0
+       WARN("couldn't delete old PID file: %s", strerror(errno));
++#endif
+       return STS_FAILURE;
+    }
+    return STS_SUCCESS;

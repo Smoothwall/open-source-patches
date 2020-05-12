@@ -1,0 +1,49 @@
+Description: Add X-Spoof-Address header to set the local bind address
+ Guardian uses this header to ask Squid to spoof the original client's
+ IP address. This behaviour is only applied to connections from localhost.
+ Once Guardian uses a Unix domain socket to talk to Squid, the shim could
+ emulate Squid's normal transparent interception behaviour so this patch
+ could become redundant.
+Author: Harry Mason <harry.mason@smoothwall.net>
+Origin: vendor
+--- a/src/tools.cc
++++ b/src/tools.cc
+@@ -1227,13 +1227,9 @@
+         cap_value_t cap_list[10];
+         cap_list[ncaps] = CAP_NET_BIND_SERVICE;
+         ++ncaps;
+-        if (Ip::Interceptor.TransparentActive() ||
+-                Ip::Qos::TheConfig.isHitNfmarkActive() ||
+-                Ip::Qos::TheConfig.isAclNfmarkActive() ||
+-                Ip::Qos::TheConfig.isAclTosActive()) {
+-            cap_list[ncaps] = CAP_NET_ADMIN;
+-            ++ncaps;
+-        }
++	// Always ask for CAP_NET_ADMIN, for TPROXY spoofing
++        cap_list[ncaps] = CAP_NET_ADMIN;
++        ++ncaps;
+ 
+         cap_clear_flag(caps, CAP_EFFECTIVE);
+         rc |= cap_set_flag(caps, CAP_EFFECTIVE, ncaps, cap_list, CAP_SET);
+--- a/src/FwdState.cc
++++ b/src/FwdState.cc
+@@ -1237,6 +1237,19 @@
+     if (conn->remote.isIPv4())
+         conn->local.setIPv4();
+ 
++    // Has Guardian told us to spoof an address?
++    const bool isLocalhost = request && request->client_addr.isLocalhost();
++    if (isLocalhost) {
++        String header(request->header.getByName("X-Spoof-Address"));
++        const char *buf = header.termedBuf();
++        if (buf && *buf) {
++            conn->local = buf;
++            conn->flags |= COMM_DOBIND;
++            conn->flags |= COMM_TRANSPARENT;
++            return;
++        }
++    }
++
+     // maybe use TPROXY client address
+     if (request && request->flags.spoofClientIp) {
+         if (!conn->getPeer() || !conn->getPeer()->options.no_tproxy) {

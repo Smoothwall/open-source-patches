@@ -1,0 +1,291 @@
+--- a/pppd/auth.c
++++ b/pppd/auth.c
+@@ -123,6 +123,11 @@
+ 
+ #define ISWILD(word)	(word[0] == '*' && word[1] == 0)
+ 
++/* remove the #defined CHAP and UPAP secrets files */
++
++extern char * upapfilename;
++extern char * chapfilename;
++
+ /* The name by which the peer authenticated itself to us. */
+ char peer_authname[MAXNAMELEN];
+ 
+@@ -227,6 +232,7 @@
+ #ifdef CHAPMS
+ bool refuse_mschap = 0;		/* Don't wanna auth. ourselves with MS-CHAP */
+ bool refuse_mschap_v2 = 0;	/* Don't wanna auth. ourselves with MS-CHAPv2 */
++bool ms_ignore_domain = 0;	/* Ignore any MS domain prefix */
+ #else
+ bool refuse_mschap = 1;		/* Don't wanna auth. ourselves with MS-CHAP */
+ bool refuse_mschap_v2 = 1;	/* Don't wanna auth. ourselves with MS-CHAPv2 */
+@@ -314,6 +320,8 @@
+       "Require MS-CHAPv2 authentication from peer",
+       OPT_ALIAS | OPT_PRIOSUB | OPT_A2OR | MDTYPE_MICROSOFT_V2,
+       &lcp_wantoptions[0].chap_mdtype },
++    { "ms-ignore-domain", o_bool, &ms_ignore_domain,
++      "Ignore any MS domain prefix in the username", 1 },
+ #endif
+ 
+     { "refuse-pap", o_bool, &refuse_pap,
+@@ -1411,7 +1419,7 @@
+      * Open the file of pap secrets and scan for a suitable secret
+      * for authenticating this user.
+      */
+-    filename = _PATH_UPAPFILE;
++    filename = upapfilename;
+     addrs = opts = NULL;
+     ret = UPAP_AUTHNAK;
+     f = fopen(filename, "r");
+@@ -1509,7 +1517,7 @@
+      * Open the file of pap secrets and scan for a suitable secret.
+      */
+     if (ret <= 0) {
+-	filename = _PATH_UPAPFILE;
++	filename = upapfilename;
+ 	addrs = NULL;
+ 	f = fopen(filename, "r");
+ 	if (f == NULL)
+@@ -1557,7 +1565,7 @@
+ 	    return ret;
+     }
+ 
+-    filename = _PATH_UPAPFILE;
++    filename = upapfilename;
+     f = fopen(filename, "r");
+     if (f == NULL)
+ 	return 0;
+@@ -1595,7 +1603,7 @@
+ 	    return ret;
+     }
+ 
+-    filename = _PATH_UPAPFILE;
++    filename = upapfilename;
+     f = fopen(filename, "r");
+     if (f == NULL)
+ 	return 0;
+@@ -1640,7 +1648,7 @@
+ 	}
+     }
+ 
+-    filename = _PATH_CHAPFILE;
++    filename = chapfilename;
+     f = fopen(filename, "r");
+     if (f == NULL)
+ 	return 0;
+@@ -1703,23 +1711,23 @@
+ 	free_wordlist(addrs);
+ 
+     return ret >= 0;
+-}
++	}
+ 
+ 
+-/*
++	/*
+  * get_secret - open the CHAP secret file and return the secret
+  * for authenticating the given client on the given server.
+  * (We could be either client or server).
+  */
+-int
+-get_secret(unit, client, server, secret, secret_len, am_server)
++	int
++	get_secret(unit, client, server, secret, secret_len, am_server)
+     int unit;
+     char *client;
+     char *server;
+     char *secret;
+     int *secret_len;
+     int am_server;
+-{
++	{
+     FILE *f;
+     int ret, len;
+     char *filename;
+@@ -1735,7 +1743,7 @@
+ 	    return 0;
+ 	}
+     } else {
+-	filename = _PATH_CHAPFILE;
++		filename = chapfilename;
+ 	addrs = NULL;
+ 	secbuf[0] = 0;
+ 
+@@ -1769,22 +1777,22 @@
+     *secret_len = len;
+ 
+     return 1;
+-}
++	}
+ 
+ 
+-/*
++	/*
+  * get_srp_secret - open the SRP secret file and return the secret
+  * for authenticating the given client on the given server.
+  * (We could be either client or server).
+  */
+-int
+-get_srp_secret(unit, client, server, secret, am_server)
++	int
++	get_srp_secret(unit, client, server, secret, am_server)
+     int unit;
+     char *client;
+     char *server;
+     char *secret;
+     int am_server;
+-{
++	{
+     FILE *fp;
+     int ret;
+     char *filename;
+--- a/pppd/chap-new.c
++++ b/pppd/chap-new.c
+@@ -414,6 +414,14 @@
+ 	int ok;
+ 	unsigned char secret[MAXSECRETLEN];
+ 	int secret_len;
++#ifdef CHAPMS
++	char nametmp[MAXNAMELEN];
++
++	if (ms_ignore_domain && strrchr(name, '\\')) {
++		strcpy(nametmp, strrchr(name, '\\') + 1);
++		strcpy(name, nametmp);
++	}
++#endif
+ 
+ 	/* Get the secret that the peer is supposed to know */
+ 	if (!get_secret(0, name, ourname, (char *)secret, &secret_len, 1)) {
+--- a/pppd/main.c
++++ b/pppd/main.c
+@@ -121,6 +121,15 @@
+ #include "atcp.h"
+ #endif
+ 
++/* remove the statically compiled CHAP and UPAP secrets names */
++char * upapfilename;
++char * chapfilename;
++
++static char * default_upap = _PATH_UPAPFILE;
++static char * default_chap = _PATH_CHAPFILE;
++
++
++
+ static const char rcsid[] = RCSID;
+ 
+ /* interface vars */
+@@ -316,6 +325,9 @@
+     struct protent *protp;
+     char numbuf[16];
+ 
++    upapfilename = default_upap;
++    chapfilename = default_chap;
++    
+     link_stats_valid = 0;
+     new_phase(PHASE_INITIALIZE);
+ 
+@@ -470,7 +482,7 @@
+ 	else
+ 	    p = "(unknown)";
+     }
+-    syslog(LOG_NOTICE, "pppd %s started by %s, uid %d", VERSION, p, uid);
++    syslog(LOG_NOTICE, "l2tppppd %s started by %s, uid %d", VERSION, p, uid);
+     script_setenv("PPPLOGNAME", p, 0);
+ 
+     if (devnam[0])
+@@ -801,7 +813,7 @@
+ void
+ reopen_log()
+ {
+-    openlog("pppd", LOG_PID | LOG_NDELAY, LOG_PPP);
++    openlog("l2tppppd", LOG_PID | LOG_NDELAY, LOG_PPP);
+     setlogmask(LOG_UPTO(LOG_INFO));
+ }
+ 
+--- a/pppd/Makefile.linux
++++ b/pppd/Makefile.linux
+@@ -9,7 +9,7 @@
+ MANDIR = $(DESTDIR)/share/man/man8
+ INCDIR = $(DESTDIR)/include
+ 
+-TARGETS = pppd
++TARGETS = l2tppppd
+ 
+ PPPDSRCS = main.c magic.c fsm.c lcp.c ipcp.c upap.c chap-new.c md5.c ccp.c \
+ 	   ecp.c ipxcp.c auth.c options.c sys-linux.c md4.c chap_ms.c \
+@@ -198,26 +198,26 @@
+ 
+ all: $(TARGETS)
+ 
+-install: pppd
++install: l2tppppd
+ 	mkdir -p $(BINDIR) $(MANDIR)
+ 	$(EXTRAINSTALL)
+-	$(INSTALL) -c -m 555 pppd $(BINDIR)/pppd
+-	if chgrp pppusers $(BINDIR)/pppd 2>/dev/null; then \
+-	  chmod o-rx,u+s $(BINDIR)/pppd; fi
+-	$(INSTALL) -c -m 444 pppd.8 $(MANDIR)
++	$(INSTALL) -c -m 555 l2tppppd $(BINDIR)/l2tppppd
++	if chgrp pppusers $(BINDIR)/l2tppppd 2>/dev/null; then \
++	  chmod o-rx,u+s $(BINDIR)/l2tppppd; fi
++	$(INSTALL) -c -m 444 l2tppppd.8 $(MANDIR)
+ 
+ %.o: %.c
+ 	$(CC) $(COPTS) $(CFLAGS) -c $<
+ 
+-pppd: $(PPPDOBJS)
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o pppd $(PPPDOBJS) $(LIBS)
++l2tppppd: $(PPPDOBJS)
++	$(CC) $(CFLAGS) $(LDFLAGS) -o l2tppppd $(PPPDOBJS) $(LIBS)
+ 
+ srp-entry:	srp-entry.c
+ 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ srp-entry.c $(LIBS)
+ 
+ install-devel:
+-	mkdir -p $(INCDIR)/pppd
+-	$(INSTALL) -c -m 644 $(HEADERS) $(INCDIR)/pppd
++	mkdir -p $(INCDIR)/l2tppppd
++	$(INSTALL) -c -m 644 $(HEADERS) $(INCDIR)/l2tppppd
+ 
+ clean:
+ 	rm -f $(PPPDOBJS) $(EXTRACLEAN) $(TARGETS) *~ #* core
+--- a/pppd/options.c
++++ b/pppd/options.c
+@@ -75,6 +75,10 @@
+ #include "pppd.h"
+ #include "pathnames.h"
+ 
++/* remove the dependanies for a statically compiled PAP and CHAP secrets file */
++extern char * upapfilename;
++extern char * chapfilename;
++
+ #if defined(ultrix) || defined(NeXT)
+ char *strdup __P((char *));
+ #endif
+@@ -320,6 +324,12 @@
+     { "mo-timeout", o_int, &maxoctets_timeout,
+       "Check for traffic limit every N seconds", OPT_PRIO | OPT_LLIMIT | 1 },
+ #endif
++    { "papfilename", o_string, &upapfilename,
++      "set the upap filename", OPT_PRIO },
++  
++    { "chapfilename", o_string, &chapfilename,
++      "set the chap filename", OPT_PRIO },
++
+ 
+     { NULL }
+ };
+--- a/pppd/pppd.h
++++ b/pppd/pppd.h
+@@ -320,6 +320,10 @@
+ extern bool	dryrun;		/* check everything, print options, exit */
+ extern int	child_wait;	/* # seconds to wait for children at end */
+ 
++#ifdef CHAPMS
++extern bool	ms_ignore_domain; /* Ignore any MS domain prefix */
++#endif
++
+ #ifdef MAXOCTETS
+ extern unsigned int maxoctets;	     /* Maximum octetes per session (in bytes) */
+ extern int       maxoctets_dir;      /* Direction :

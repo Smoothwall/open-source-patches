@@ -1,0 +1,28 @@
+--- a/ntpd.c
++++ b/ntpd.c
+@@ -166,6 +166,15 @@
+ 	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, pipe_chld) == -1)
+ 		fatal("socketpair");
+ 
++	if (!lconf.debug)
++	{
++		FILE *pidfile = fopen("/var/run/ntpd.pid", "w");
++		if (pidfile) {
++			fprintf(pidfile, "%d\n", getpid());
++			fclose(pidfile);
++		}
++	}
++
+ 	signal(SIGCHLD, sighdlr);
+ 	/* fork child process */
+ 	chld_pid = ntp_main(pipe_chld, &lconf);
+@@ -233,6 +242,9 @@
+ 	if (chld_pid)
+ 		kill(chld_pid, SIGTERM);
+ 
++	if (!lconf.debug)
++		unlink("/var/run/ntpd.pid");
++
+ 	do {
+ 		if ((pid = wait(NULL)) == -1 &&
+ 		    errno != EINTR && errno != ECHILD)

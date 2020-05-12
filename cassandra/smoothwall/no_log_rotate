@@ -1,0 +1,53 @@
+Description: Disable log rotation as we want (need) to use the Smoothwall
+  general log rotate.
+  Also turn of scan for changes to the logging settings as we don't expect
+  these to change dynamically.
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+--- a/cassandra/etc/cassandra/logback.xml
++++ b/cassandra/etc/cassandra/logback.xml
+@@ -22,25 +22,17 @@
+ appender reference in the root level section below.
+ -->
+ 
+-<configuration scan="true">
++<configuration scan="false">
+   <jmxConfigurator />
+   <shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
+ 
+   <!-- SYSTEMLOG rolling file appender to system.log (INFO level) -->
+ 
+-  <appender name="SYSTEMLOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
++  <appender name="SYSTEMLOG" class="ch.qos.logback.core.FileAppender">
+     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+       <level>INFO</level>
+     </filter>
+     <file>${cassandra.logdir}/system.log</file>
+-    <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+-      <fileNamePattern>${cassandra.logdir}/system.log.%i.zip</fileNamePattern>
+-      <minIndex>1</minIndex>
+-      <maxIndex>20</maxIndex>
+-    </rollingPolicy>
+-    <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+-      <maxFileSize>20MB</maxFileSize>
+-    </triggeringPolicy>
+     <encoder>
+       <pattern>%-5level [%thread] %date{ISO8601} %F:%L - %msg%n</pattern>
+     </encoder>
+@@ -48,16 +40,8 @@
+ 
+   <!-- DEBUGLOG rolling file appender to debug.log (all levels) -->
+ 
+-  <appender name="DEBUGLOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
++  <appender name="DEBUGLOG" class="ch.qos.logback.core.FileAppender">
+     <file>${cassandra.logdir}/debug.log</file>
+-    <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+-      <fileNamePattern>${cassandra.logdir}/debug.log.%i.zip</fileNamePattern>
+-      <minIndex>1</minIndex>
+-      <maxIndex>20</maxIndex>
+-    </rollingPolicy>
+-    <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+-      <maxFileSize>20MB</maxFileSize>
+-    </triggeringPolicy>
+     <encoder>
+       <pattern>%-5level [%thread] %date{ISO8601} %F:%L - %msg%n</pattern>
+     </encoder>

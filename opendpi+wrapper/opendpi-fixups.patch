@@ -1,0 +1,219 @@
+diff --git a/wrapper/AUTHORS b/wrapper/AUTHORS
+index 02cfc65..5e78b6f 100644
+--- a/wrapper/AUTHORS
++++ b/wrapper/AUTHORS
+@@ -1 +1 @@
+-Gerardo E. Gidoni <gerel@gnu.org>
++G. Elian Gidoni <geg@gnu.org>
+diff --git a/wrapper/README b/wrapper/README
+index 19b7f18..48566a4 100644
+--- a/wrapper/README
++++ b/wrapper/README
+@@ -1,22 +1,20 @@
+-OpenDPI module README
+----------------------
+-
+ This package is a GPL implementation of an iptables and netfilter module for
+ OpenDPI integration into the Linux kernel.
+ 
+ The prerequisites are:
+ 
+-- OpenDPI source package 
+-
+-- Linux sources (it's been tested for versions 2.6.26 and 2.6.34)
+-
+-- Iptables header files (called "iptables-dev" in Debian distributions, it's
+-  been tested for version 1.4.2)
++- Tested on Debian 6.0 (Kernel 2.6.32-5)
++- Following packages to compile kernel-modules:
++   linux-headers
++   iptables-dev >= version 1.4.8-3
++   OpenDPI source package
+ 
+ 
+ Compiled kernel features
+ ------------------------
+ 
++You do not need to do the below steps for Debian 6
++
+ In order to use OpenDPI as a kernel module notice that:
+ 
+ - You should ENABLE Netfilter conntrack events (and also enable Advanced
+diff --git a/wrapper/ipt/Makefile b/wrapper/ipt/Makefile
+index 9112ead..689620d 100644
+--- a/wrapper/ipt/Makefile
++++ b/wrapper/ipt/Makefile
+@@ -14,8 +14,8 @@ all:
+ 	make libxt_opendpi.so
+ 	rm -r ${OPENDPI_SRC}
+ lib%.so: lib%.o
+-	gcc -shared -o $@ $^;
++	$(CC) -shared -o $@ $^;
+ lib%.o: lib%.c
+-	gcc ${CFLAGS} -D_INIT=lib$*_init -c -o $@ $<;
++	$(CC) ${CFLAGS} -D_INIT=lib$*_init -c -o $@ $<;
+ clean:
+ 	rm -rf libxt_opendpi.so ${OPENDPI_SRC}
+diff --git a/wrapper/ipt/libxt_opendpi.c b/wrapper/ipt/libxt_opendpi.c
+index f5ae6d7..876f620 100644
+--- a/wrapper/ipt/libxt_opendpi.c
++++ b/wrapper/ipt/libxt_opendpi.c
+@@ -1,6 +1,6 @@
+ /* 
+  * libxt_opendpi.c
+- * Copyright (C) 2010 Gerardo E. Gidoni <gerel@gnu.org>
++ * Copyright (C) 2010-2012 G. Elian Gidoni <geg@gnu.org>
+  * 
+  * This file is part of OpenDPI, an open source deep packet inspection
+  * library based on the PACE technology by ipoque GmbH
+@@ -25,6 +25,8 @@
+ #include <arpa/inet.h>
+ #include <xtables.h>
+ 
++#include <linux/version.h>
++
+ #include "xt_opendpi.h"
+ 
+ static char *prot_long_str[] = { IPOQUE_PROTOCOL_LONG_STRING };
+@@ -122,7 +124,11 @@ opendpi_mt4_reg = {
+ 	.version = XTABLES_VERSION,
+ 	.name = "opendpi",
+ 	.revision = 0,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
+ 	.family = AF_INET,
++#else
++	.family = NFPROTO_IPV4,
++#endif
+ 	.size = XT_ALIGN(sizeof(struct xt_opendpi_mtinfo)),
+ 	.userspacesize = XT_ALIGN(sizeof(struct xt_opendpi_mtinfo)),
+ 	.help = opendpi_mt_help,
+diff --git a/wrapper/src/Makefile b/wrapper/src/Makefile
+index e97990b..2921292 100644
+--- a/wrapper/src/Makefile
++++ b/wrapper/src/Makefile
+@@ -4,8 +4,8 @@ OPENDPI_PRO := ${OPENDPI_SRC}/lib/protocols
+ 
+ ccflags-y += -I${src}/${OPENDPI_SRC}/include -I${src}/${OPENDPI_SRC}/lib -DOPENDPI_NETFILTER_MODULE
+ 
+-MODULES_DIR := /lib/modules/$(shell uname -r)
+-KERNEL_DIR := ${MODULES_DIR}/build
++#MODULES_DIR := /lib/modules/$(shell uname -r)
++#KERNEL_DIR := ${MODULES_DIR}/build
+ 
+ obj-m := xt_opendpi.o
+ xt_opendpi-y := main.o ${OPENDPI_SRC}/lib/ipq_main.o \
+diff --git a/wrapper/src/main.c b/wrapper/src/main.c
+index 42dbddc..33e81a1 100644
+--- a/wrapper/src/main.c
++++ b/wrapper/src/main.c
+@@ -1,6 +1,6 @@
+ /* 
+  * main.c
+- * Copyright (C) 2010 Gerardo E. Gidoni <gerel@gnu.org>
++ * Copyright (C) 2010-2012 G. Elian Gidoni <geg@gnu.org>
+  * 
+  * This file is part of OpenDPI, an open source deep packet inspection
+  * library based on the PACE technology by ipoque GmbH
+@@ -40,7 +40,7 @@
+ #include "xt_opendpi.h"
+ 
+ MODULE_LICENSE("GPL");
+-MODULE_AUTHOR("Gerardo E. Gidoni <gerel@gnu.org>");
++MODULE_AUTHOR("G. Elian Gidoni <geg@gnu.org>");
+ MODULE_DESCRIPTION("OpenDPI wrapper");
+ MODULE_ALIAS("ipt_opendpi");
+ 
+@@ -452,9 +452,12 @@ opendpi_mt (const struct sk_buff *skb,
+             unsigned int protoff,
+             bool *hotdrop)
+ 
+-#else
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
+ static bool
+ opendpi_mt(const struct sk_buff *skb, const struct xt_match_param *par)
++#else
++static bool
++opendpi_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ #endif
+ {
+ 	u32 proto;
+@@ -538,7 +541,7 @@ opendpi_mt_check(const char *tablename,
+ 	return nf_ct_l3proto_try_module_get (match->family) == 0;
+ }
+ 
+-#else
++#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
+ static bool
+ opendpi_mt_check(const struct xt_mtchk_param *par)
+ {
+@@ -553,6 +556,21 @@ opendpi_mt_check(const struct xt_mtchk_param *par)
+ 
+ 	return nf_ct_l3proto_try_module_get (par->family) == 0;
+ }
++#else
++static int
++opendpi_mt_check(const struct xt_mtchk_param *par)
++{
++	const struct xt_opendpi_mtinfo *info = par->matchinfo;
++
++	if (IPOQUE_BITMASK_IS_ZERO(info->flags)){
++		pr_info("None selected protocol.\n");
++		return -EINVAL;
++	}
++
++        opendpi_enable_protocols (info);
++
++	return nf_ct_l3proto_try_module_get (par->family);
++}
+ #endif
+ 
+ 
+@@ -587,8 +605,12 @@ static void opendpi_cleanup(void)
+         struct osdpi_flow_node *flow;
+ 
+         ipoque_exit_detection_module(ipoque_struct, free_wrapper);
+-        
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)         
+         nf_conntrack_unregister_notifier (&osdpi_notifier);
++#else
++	nf_conntrack_unregister_notifier (&init_net,&osdpi_notifier);
++#endif
+         
+         /* free all objects before destroying caches */
+         next = rb_first(&osdpi_flow_root);
+@@ -673,8 +695,12 @@ static int __init opendpi_mt_init(void)
+                 ret = -ENOMEM;
+                 goto err_flow;
+         }
+-        
++
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3,2,0)        
+         ret = nf_conntrack_register_notifier(&osdpi_notifier);
++#else
++	ret = nf_conntrack_register_notifier(&init_net,&osdpi_notifier);
++#endif
+         if (ret < 0){
+                 pr_err("xt_opendpi: error registering notifier.\n");
+                 goto err_id;
+@@ -701,7 +727,7 @@ err_out:
+ 
+ static void __exit opendpi_mt_exit(void)
+ {
+-	pr_info("xt_opendpi 0.1 unload.\n");
++	pr_info("xt_opendpi 1.2 unload.\n");
+ 
+ 	xt_unregister_match(&opendpi_mt_reg);
+ 
+diff --git a/wrapper/src/xt_opendpi.h b/wrapper/src/xt_opendpi.h
+index cc5c11d..4d402c3 100644
+--- a/wrapper/src/xt_opendpi.h
++++ b/wrapper/src/xt_opendpi.h
+@@ -1,6 +1,6 @@
+ /* 
+  * xt_opendpi.h
+- * Copyright (C) 2010 Gerardo E. Gidoni <gerel@gnu.org>
++ * Copyright (C) 2010-2012 G. Elian Gidoni <geg@gnu.org>
+  * 
+  * This file is part of OpenDPI, an open source deep packet inspection
+  * library based on the PACE technology by ipoque GmbH

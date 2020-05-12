@@ -1,0 +1,26 @@
+Author: Lawerence Manning <lawrence.manning@smoothwall.net>
+Description: The IMSpector censord plugin was causing segfault.
+ This patch corrects the order of the requst block sent to censord, 
+ and ensures that the fields are sent in the order it expects them to be in.
+--- a/censordfilterplugin.cpp
++++ b/censordfilterplugin.cpp
+@@ -62,16 +62,16 @@ bool filter(char *originalbuffer, char *modifiedbuffer, struct imevent &imevent)
+ 		"remoteid %s\r\n" \
+ 		"charset UTF-8\r\n" \
+ 		"length %d\r\n" \
+-		"clientaddress %s\n" \
++		"clientaddress %s\r\n" \
+ 		"\r\n" \
+ 		"%s",
+ 		imevent.outgoing ? "outgoing" : "incoming",
+ 		imevent.protocolname.c_str(),
+ 		imevent.localid.c_str(),
+ 		imevent.remoteid.c_str(),
+-		imevent.clientaddress.c_str(),
+ 		modifiedbufferlength,
+-		modifiedbuffer);		
++		imevent.clientaddress.c_str(),
++		modifiedbuffer);
+ 	
+ 	/* Complete the connection. */
+ 	if (!(censordsock.connectsocket(CENSORD_SOCKET, "")))

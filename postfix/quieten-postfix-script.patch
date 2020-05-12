@@ -1,0 +1,63 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Quieten warnings from postfix-script
+--- a/conf/postfix-script
++++ b/conf/postfix-script
+@@ -240,22 +240,10 @@
+ 	todo="$config_directory $queue_directory $queue_directory/pid"
+ 	test -n "$check_shared_files" && todo="$daemon_directory $todo"
+ 
+-	for dir in $todo
+-	do
+-		ls -lLd $dir | (grep " root " >/dev/null ||
+-		    $WARN not owned by root: $dir)
+-	done
+-
+ 	# Some people break Postfix's security model.
+ 	ls -lLd $queue_directory | egrep '^.....(w|...w)' >/dev/null && \
+ 		$WARN group or other writable: $queue_directory
+ 
+-	todo="$config_directory/*"
+-	test -n "$check_shared_files" && todo="$daemon_directory/* $todo"
+-
+-	find $todo ! -user root \
+-		-exec $WARN not owned by root: {} \;
+-
+ 	todo="$config_directory/."
+ 	test -n "$check_shared_files" && todo="$daemon_directory/. $todo"
+ 
+@@ -282,35 +270,12 @@
+ 	    -prune ! -group $setgid_group \
+ 	    -exec $WARN not owned by group $setgid_group: {} \;
+ 
+-	test -n "$check_shared_files" &&
+-	find $command_directory/postqueue $command_directory/postdrop \
+-	    -prune ! -perm -02111 \
+-	    -exec $WARN not set-gid or not owner+group+world executable: {} \;
+-
+-	for name in `ls -d $queue_directory/* | \
+-	    egrep '/(bin|etc|lib|usr)$'` ; \
+-	do \
+-	    find $name ! -user root \
+-		-exec $WARN not owned by root: {} \; ; \
+-	done
+-
+ 	# WARNING: this should not descend into the maildrop directory.
+ 	# maildrop is the least trusted Postfix directory.
+ 
+ 	find $queue_directory/maildrop/. -prune ! -user $mail_owner \
+ 	    -exec $WARN not owned by $mail_owner: $queue_directory/maildrop \;
+ 
+-	for dir in bin etc lib sbin usr
+-	do
+-		test -d $dir && find $dir -type f -print | while read path
+-		do
+-			test -f /$path && {
+-			    cmp -s $path /$path || 
+-				$WARN $queue_directory/$path and /$path differ
+-			}
+-		done
+-	done
+-
+ 	find corrupt -type f -exec $WARN damaged message: {} \;
+ 
+ 	# XXX also: look for weird stuff, weird permissions, etc.

@@ -1,0 +1,52 @@
+--- p3scan-2.2/p3scan.c	2006-08-22 15:24:05.000000000 +0100
++++ p3scan-2.2.new/p3scan.c	2006-08-22 15:23:15.000000000 +0100
+@@ -1169,7 +1169,11 @@
+    lb=linebuf_init(65535);
+    while (getlinep3(fd, lb)>=0){
+       if (lb->linelen >0 ){
+-         if (!strncasecmp(lb->line, "from: ", 6)){
++         if (!strncasecmp(lb->line, "Message-ID: ", 12)){
++            c=lb->line+12;
++            TRIM(c);
++            paramlist_set(params, "%MAILMESSAGEID%", c);
++         } else if (!strncasecmp(lb->line, "from: ", 6)){
+             c=lb->line+6;
+             TRIM(c);
+             paramlist_set(params, "%MAILFROM%", c);
+@@ -1205,6 +1209,7 @@
+    paramlist_set(params, "%MAILFILE%", NULL);
+    paramlist_set(params, "%P3SCANID%", NULL);
+    paramlist_set(params, "%VDINFO%", NULL);
++   paramlist_set(params, "%MAILMESSAGEID%", NULL);
+ }
+ 
+ int do_virusaction(struct proxycontext * p){
+@@ -1879,12 +1884,12 @@
+                      paramlist_set(p->params, "%MAILFILE%", p->mailfile);
+                      if (config->delit) paramlist_set(p->params, "%P3SCANID%", config->notify);
+                      else paramlist_set(p->params, "%P3SCANID%", p->filename);
+-                     do_log(LOG_WARNING, "VIRUS: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) virus: (%s) bytes: (%lu)",
++                     do_log(LOG_WARNING, "VIRUS: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) virus: (%s) bytes: (%lu) messageid: (%s)",
+                         paramlist_get(p->params,"%CLIENTIP%"), paramlist_get(p->params,"%CLIENTPORT%"),
+                         paramlist_get(p->params,"%SERVERIP%"), paramlist_get(p->params,"%SERVERPORT%"),
+                         paramlist_get(p->params,"%MAILFROM%"), paramlist_get(p->params,"%MAILTO%"),
+                         paramlist_get(p->params,"%USERNAME%"), paramlist_get(p->params,"%VIRUSNAME%"),
+-						len);
++						len, paramlist_get(p->params,"%MAILMESSAGEID%"));
+                      if (do_virusaction(p)!=0){
+                         if (p->cksmtp) {
+                            /* Try cleaning it up again */
+@@ -1906,11 +1911,11 @@
+                      p->serverbuf->linelen=GETLINE_LINE_NULL;
+                      if (config->delit) unlink(p->mailfile);
+                   } /* virus */ else {
+-					do_log(LOG_WARNING, "CLEAN: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) bytes: (%lu)",
++					do_log(LOG_WARNING, "CLEAN: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) bytes: (%lu) messageid: (%s)",
+                         paramlist_get(p->params,"%SERVERIP%"), paramlist_get(p->params,"%SERVERPORT%"),
+                         paramlist_get(p->params,"%CLIENTIP%"), paramlist_get(p->params,"%CLIENTPORT%"),
+                         paramlist_get(p->params,"%MAILFROM%"), paramlist_get(p->params,"%MAILTO%"),
+-                        paramlist_get(p->params,"%USERNAME%"), len);
++                        paramlist_get(p->params,"%USERNAME%"), len, paramlist_get(p->params,"%MAILMESSAGEID%"));
+ 				  }
+                   /* see if there was a critical error */
+                   if (scannerret==SCANNER_RET_CRIT){

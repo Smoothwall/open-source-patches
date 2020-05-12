@@ -1,0 +1,26 @@
+Author: Thomas Parmelan <parmelan+debian@free.fr>
+Subject: -d option causes fatal error
+Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=397941
+Bug: http://rt.cpan.org/Ticket/Display.html?id=19759
+Last-Update: 2011-05-03
+Reviewed-by: Nicholas Bamber <nicholas@periapt.co.uk>
+--- a/ipcount
++++ b/ipcount
+@@ -77,7 +77,7 @@
+ 	
+ 	while ($current->bincomp ('lt', $last))
+ 	{
+-		$new_ip->set($current->last_ip.'+'.$size) or die (Error());
++		$new_ip->set($current->last_ip.' + '.$size) or die (Error());
+ 		print $new_ip->print,"\n";
+ 		
+ 		if ($opts{r})
+@@ -85,7 +85,7 @@
+ 			print $new_ip->reverse_ip,"\n";
+ 		}
+ 		
+-		$current->set($new_ip->last_ip .'+ 1') or die (Error());
++		$current->set($new_ip->last_ip .' + 1') or die (Error());
+ 		
+ 		$count++;
+ 	}

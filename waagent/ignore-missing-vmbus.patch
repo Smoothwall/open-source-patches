@@ -1,0 +1,23 @@
+From 27825dd09dfe4812803564b1064e23069eaa6fa6 Mon Sep 17 00:00:00 2001
+From: Bastian Blank <bastian.blank@credativ.de>
+Date: Mon, 16 Jan 2017 17:29:27 +0100
+Subject: Don't fail if /sys/bus/vmbus/devices/ does not exist
+
+Patch-Name: ignore-missing-vmbus.patch
+---
+ azurelinuxagent/common/osutil/default.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/azurelinuxagent/common/osutil/default.py b/azurelinuxagent/common/osutil/default.py
+index f9fffdd..3a6d20c 100644
+--- a/azurelinuxagent/common/osutil/default.py
++++ b/azurelinuxagent/common/osutil/default.py
+@@ -725,6 +725,8 @@ class DefaultOSUtil(object):
+             port_id = port_id - 2
+         device = None
+         path = "/sys/bus/vmbus/devices/"
++        if not os.path.exists(path):
++            return
+         for vmbus in os.listdir(path):
+             deviceid = fileutil.read_file(os.path.join(path, vmbus, "device_id"))
+             guid = deviceid.lstrip('{').split('-')

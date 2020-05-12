@@ -1,0 +1,11 @@
+--- ebtables-v2.0.8-1/Makefile	2007-05-28 17:42:08.000000000 +0100
++++ ebtables-v2.0.8-1.new/Makefile	2007-09-03 16:21:30.000000000 +0100
+@@ -187,7 +187,7 @@
+ 	install -m 0755 -o root -g root ebtables-restore $(DESTDIR)$(BINDIR)/ebtables-restore
+ 
+ .PHONY: install
+-install: $(MANDIR)/man8/ebtables.8 $(DESTDIR)$(ETHERTYPESFILE) exec scripts
++install: $(MANDIR)/man8/ebtables.8 $(DESTDIR)$(ETHERTYPESFILE) exec
+ 	mkdir -p $(DESTDIR)$(LIBDIR)
+ 	install -m 0755 extensions/*.so $(DESTDIR)$(LIBDIR)
+ 	install -m 0755 *.so $(DESTDIR)$(LIBDIR)

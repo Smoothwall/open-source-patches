@@ -1,0 +1,11 @@
+--- jaula-1.4.0/configure	2009-01-11 16:35:46.000000000 +0000
++++ jaula-1.4.0/configure.patched	2010-08-05 12:22:56.000000000 +0100
+@@ -2443,7 +2443,7 @@
+ 
+ 
+ 
+-SUBDIRS="doc jaula examples"
++SUBDIRS="jaula"
+ 
+ 
+ 

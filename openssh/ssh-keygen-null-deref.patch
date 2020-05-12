@@ -1,0 +1,31 @@
+From 35b2ea77a74348b575d680061f35ec7992b26ec8 Mon Sep 17 00:00:00 2001
+From: "dtucker@openbsd.org" <dtucker@openbsd.org>
+Date: Mon, 6 Mar 2017 02:03:20 +0000
+Subject: upstream commit
+
+Check l->hosts before dereferencing; fixes potential null
+pointer deref. ok djm@
+
+Upstream-ID: 81c0327c6ec361da794b5c680601195cc23d1301
+
+Origin: https://anongit.mindrot.org/openssh.git/commit/?id=18501151cf272a15b5f2c5e777f2e0933633c513
+Last-Update: 2017-03-16
+
+Patch-Name: ssh-keygen-null-deref.patch
+---
+ ssh-keygen.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/ssh-keygen.c b/ssh-keygen.c
+index 0833ee61..a7c1e80b 100644
+--- a/ssh-keygen.c
++++ b/ssh-keygen.c
+@@ -1082,7 +1082,7 @@ known_hosts_hash(struct hostkey_foreach_line *l, void *_ctx)
+ 	struct known_hosts_ctx *ctx = (struct known_hosts_ctx *)_ctx;
+ 	char *hashed, *cp, *hosts, *ohosts;
+ 	int has_wild = l->hosts && strcspn(l->hosts, "*?!") != strlen(l->hosts);
+-	int was_hashed = l->hosts[0] == HASH_DELIM;
++	int was_hashed = l->hosts && l->hosts[0] == HASH_DELIM;
+ 
+ 	switch (l->status) {
+ 	case HKF_STATUS_OK:

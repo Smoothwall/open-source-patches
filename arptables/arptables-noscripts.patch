@@ -1,0 +1,11 @@
+--- arptables-v0.0.3-3/Makefile	2007-08-19 14:04:51.000000000 +0100
++++ arptables-v0.0.3-3.new/Makefile	2007-09-03 16:59:15.000000000 +0100
+@@ -54,7 +54,7 @@
+ 	rm -f arptables-save_ arptables-restore_ arptables.sysv_
+ 
+ .PHONY: install
+-install: $(DESTDIR)$(MANDIR)/man8/arptables.8 $(DESTDIR)$(BINDIR)/arptables scripts
++install: $(DESTDIR)$(MANDIR)/man8/arptables.8 $(DESTDIR)$(BINDIR)/arptables
+ 
+ .PHONY: clean
+ clean:

@@ -1,0 +1,16 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Force passed CFLAGS to include existing CFLAGS from the config.
+ Without it, we miss out on vital flags such as _FILE_OFFSET_BITS.
+ See http://www.nntp.perl.org/group/perl.perl5.porters/2012/03/msg184283.html
+--- a/Makefile.PL
++++ b/Makefile.PL
+@@ -14,7 +14,8 @@
+ use vars qw($INCLUDES $CCFLAGS);
+ 
+ my $LIBS = '';
+-$CCFLAGS = '-Wall -Wundef -Wno-shadow -Wmissing-prototypes -fdiagnostics-show-option -Wformat=2 -Wstrict-aliasing -Wextra -Wmissing-declarations -Wcast-align -Wswitch-default -Wswitch-enum -Wno-undef -Wno-unused-value -Wno-unused-variable -Wno-unused-parameter -Wno-format-invalid-specifier';
++my $existing_cflags = $Config::Config{ccflags} || '';
++$CCFLAGS = '-Wall -Wundef -Wno-shadow -Wmissing-prototypes -fdiagnostics-show-option -Wformat=2 -Wstrict-aliasing -Wextra -Wmissing-declarations -Wcast-align -Wswitch-default -Wswitch-enum -Wno-undef -Wno-unused-value -Wno-unused-variable -Wno-unused-parameter -Wno-format-invalid-specifier ' . $existing_cflags;
+ 
+ if (defined $GEARMAN_LIB) {
+   print STDERR "Using GEARMAN_LIB = $GEARMAN_LIB\n";

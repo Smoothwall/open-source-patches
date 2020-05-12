@@ -1,0 +1,25 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Enforce the iptables-batch locking in all iptables commands.
+Forwarded: no
+
+--- a/iptables/xtables-multi.c
++++ b/iptables/xtables-multi.c
+@@ -13,6 +13,8 @@
+ #include "ip6tables-multi.h"
+ #endif
+ 
++#include "lock.h"
++
+ static const struct subcommand multi_subcommands[] = {
+ #ifdef ENABLE_IPV4
+ 	{"iptables",            iptables_main},
+@@ -37,5 +39,9 @@
+ 
+ int main(int argc, char **argv)
+ {
++	if (acquire_lock()) {
++		return 1;
++	}
++
+ 	return subcmd_main(argc, argv, multi_subcommands);
+ }

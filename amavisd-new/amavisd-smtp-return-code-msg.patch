@@ -1,0 +1,14 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Change SMTP shutdown message return code.
+ This changes the message's return code when shutting down amavisd.
+--- a/amavisd
++++ b/amavisd
+@@ -18238,7 +18238,7 @@
+       do_log(5,"Skip closing SMTP session in a clone [%s] (born as [%s])",
+                 $myactualpid, $my_pid);
+     } elsif (ref($self->{sock}) && ! $self->{session_closed_normally}) {
+-      my($msg) = "421 4.3.2 Service shutting down, closing channel";
++      my($msg) = "554 4.3.2 Service shutting down, closing channel";
+       $msg .= ", during waiting for input from client" if waiting_for_client();
+       $msg .= ", sig: " .
+               join(',', keys %Amavisd::got_signals)  if %Amavisd::got_signals;

@@ -1,0 +1,27 @@
+Description: Allow use of non root owned pipes
+ The code checks to see if a socket is owned by root before using it,
+ as it will send passwords down it. This behaviour does not work for us
+ as we run as auth user, and the file is not owned by root.
+ .
+ There is no demand for this patch upstream, so for the best chance that
+ it applies cleanly when we update it has been made as simple as possible.
+ .
+ We simply return true early whenever the check is called.
+Author: Jonathan Barron <jonathan.barron@smoothwall.net>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: samba/nsswitch/wb_common.c
+===================================================================
+--- samba.orig/nsswitch/wb_common.c	2016-08-15 14:53:53.776778821 +0100
++++ samba/nsswitch/wb_common.c	2016-08-15 14:53:53.776778821 +0100
+@@ -203,6 +203,10 @@
+  */
+ static bool winbind_privileged_pipe_is_root(uid_t uid)
+ {
++	/*  On smoothie we don't care if the file isn't owned by root. */
++	return true;
++	/* Early return */
++
+ 	if (uid == 0) {
+ 		return true;
+ 	}

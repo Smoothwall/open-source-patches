@@ -1,0 +1,60 @@
+From b863a62ef2c1e71f3cdf4c74994369baa45dbce7 Mon Sep 17 00:00:00 2001
+From: Ralph Boehme <slow@samba.org>
+Date: Wed, 3 Aug 2016 15:00:45 +0200
+Subject: [PATCH] async_req: make async_connect_send() "reentrant"
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Allow callers to pass in socket fds that where already passed to an
+earlier call of async_connect_send(). Callers expect this behaviour and
+it was working until 05d4dbda8357712cb81008e0d611fdb0e7239587 broke it.
+
+The proper fix would be to change callers to close the fd and start from
+scratch with a fresh socket.
+
+Bug: https://bugzilla.samba.org/show_bug.cgi?id=12105
+
+Signed-off-by: Ralph Boehme <slow@samba.org>
+Reviewed-by: Jeremy Allison <jra@samba.org>
+
+Autobuild-User(master): Ralph Böhme <slow@samba.org>
+Autobuild-Date(master): Thu Aug  4 05:03:21 CEST 2016 on sn-devel-144
+
+(cherry picked from commit 9c6a4ea2788808bdcc7bfea798d838ea56c3b5ec)
+---
+ lib/async_req/async_sock.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/lib/async_req/async_sock.c b/lib/async_req/async_sock.c
+index c14acf3..3af1748 100644
+--- a/lib/async_req/async_sock.c
++++ b/lib/async_req/async_sock.c
+@@ -128,11 +128,21 @@ struct tevent_req *async_connect_send(
+ 	}
+ 
+ 	/*
+-	 * The only errno indicating that the connect is still in
+-	 * flight is EINPROGRESS, everything else is an error
++	 * The only errno indicating that an initial connect is still
++	 * in flight is EINPROGRESS.
++	 *
++	 * We get EALREADY when someone calls us a second time for a
++	 * given fd and the connect is still in flight (and returned
++	 * EINPROGRESS the first time).
++	 *
++	 * This allows callers like open_socket_out_send() to reuse
++	 * fds and call us with an fd for which the connect is still
++	 * in flight. The proper thing to do for callers would be
++	 * closing the fd and starting from scratch with a fresh
++	 * socket.
+ 	 */
+ 
+-	if (errno != EINPROGRESS) {
++	if (errno != EINPROGRESS && errno != EALREADY) {
+ 		tevent_req_error(req, errno);
+ 		return tevent_req_post(req, ev);
+ 	}
+-- 
+2.7.4
+

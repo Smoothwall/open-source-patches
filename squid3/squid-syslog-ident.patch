@@ -1,0 +1,146 @@
+Author: Vytas Dauksa <vytas.dauksa@smoothwall.net>
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Author: Kayvan Javid <kayvan.javid@smoothwall.net>
+Author: Stephen Baynes <stephen.baynes:smoothwall.net>
+Description: Add -i ident option to change ident used for syslog.
+ Needed for reverse proxy.
+--- a/src/debug.cc
++++ b/src/debug.cc
+@@ -33,6 +33,7 @@
+ #if HAVE_SYSLOG
+ #ifdef LOG_LOCAL4
+ static int syslog_facility = 0;
++static char *syslog_ident = NULL;
+ #endif
+ static void _db_print_syslog(const char *format, va_list args);
+ #endif
+@@ -360,7 +361,7 @@
+ #endif
+ 
+ void
+-_db_set_syslog(const char *facility)
++_db_set_syslog(const char *facility, const char *ident)
+ {
+     Debug::log_syslog = true;
+ 
+@@ -373,6 +374,12 @@
+     syslog_facility = LOG_LOCAL4;
+ #endif /* LOG_DAEMON */
+ 
++    syslog_ident = (char *) APP_SHORTNAME;
++
++    if (ident) {
++        syslog_ident = (char *) ident;
++    }
++
+     if (facility) {
+ 
+         struct syslog_facility_name *n;
+@@ -432,7 +439,7 @@
+ #if HAVE_SYSLOG && defined(LOG_LOCAL4)
+ 
+     if (Debug::log_syslog)
+-        openlog(APP_SHORTNAME, LOG_PID | LOG_NDELAY | LOG_CONS, syslog_facility);
++        openlog(syslog_ident, LOG_PID | LOG_NDELAY | LOG_CONS, syslog_facility);
+ 
+ #endif /* HAVE_SYSLOG */
+ 
+--- a/src/Debug.h
++++ b/src/Debug.h
+@@ -151,7 +151,7 @@
+ /* Legacy debug function definitions */
+ void _db_init(const char *logfile, const char *options);
+ void _db_print(const char *,...) PRINTF_FORMAT_ARG1;
+-void _db_set_syslog(const char *facility);
++void _db_set_syslog(const char *facility, const char *ident);
+ void _db_rotate_log(void);
+ 
+ /// Prints raw and/or non-terminated data safely, efficiently, and beautifully.
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -142,6 +142,8 @@
+ 
+ static int opt_signal_service = FALSE;
+ static char *opt_syslog_facility = NULL;
++static char *opt_syslog_ident = NULL;
++static bool need_syslog = false;
+ static int icpPortNumOverride = 1;  /* Want to detect "-u 0" */
+ static int configured_once = 0;
+ #if MALLOC_DBG
+@@ -291,8 +293,12 @@
+ #if USE_WIN32_SERVICE
+             "       -r        Removes a Windows Service (see -n option).\n"
+ #endif
+-            "       -s | -l facility\n"
+-            "                 Enable logging to syslog.\n"
++	    "	    -s	      Enable logging to syslog.\n"
++            "       -l facility\n"
++            "                 Enable logging to syslog with facility.\n"
++            "       -i ident\n"
++            "                 Enable logging to syslog with ident.\n"
++
+             "       -u port   Specify ICP port number (default: %d), disable with 0.\n"
+             "       -v        Print version.\n"
+             "       -z        Create missing swap directories and then exit.\n"
+@@ -325,9 +331,9 @@
+     int c;
+ 
+ #if USE_WIN32_SERVICE
+-    while ((c = getopt(argc, argv, "CDFNO:RSVYXa:d:f:hik:m::n:rsl:u:vz?")) != -1)
++    while ((c = getopt(argc, argv, "CDFNO:RSVYXa:d:f:hik:m::n:rsl:i:u:vz?")) != -1)
+ #else
+-    while ((c = getopt(argc, argv, "CDFNRSYXa:d:f:hk:m::n:sl:u:vz?")) != -1)
++    while ((c = getopt(argc, argv, "CDFNRSYXa:d:f:hk:m::sl:i:u:vz?")) != -1)
+ #endif
+     {
+ 
+@@ -529,21 +535,22 @@
+             xfree(opt_syslog_facility); // ignore any previous options sent
+             opt_syslog_facility = xstrdup(optarg);
+ 
+-        case 's':
+-            /** \par s
+-             * Initialize the syslog for output */
+-#if HAVE_SYSLOG
+-
+-            _db_set_syslog(opt_syslog_facility);
+-
++	    need_syslog = true;
+             break;
+ 
+-#else
++        case 'i':
++            /** \par l
++             * Stores the syslog service ident in global opt_syslog_ident
++             * then performs actions for -s option. */
++            xfree(opt_syslog_ident); // ignore any previous options sent
++            opt_syslog_ident = xstrdup(optarg);
+ 
+-            fatal("Logging to syslog not available on this platform");
++            need_syslog = true;
+ 
+-            /* NOTREACHED */
+-#endif
++        case 's':
++            /** \par s
++             * Initialize the syslog for output */
++	    need_syslog = true;
+ 
+         case 'u':
+             /** \par u
+@@ -594,6 +601,15 @@
+             break;
+         }
+ 
++        if (need_syslog)
++        {
++#if HAVE_SYSLOG
++            _db_set_syslog(opt_syslog_facility, opt_syslog_ident);
++#else
++            fatal("Logging to syslog not available on this platform");
++            /* NOTREACHED */
++#endif
++        }
+     }
+ }
+ 

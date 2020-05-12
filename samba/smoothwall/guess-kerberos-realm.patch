@@ -1,0 +1,45 @@
+Guess Kerberos realm from hostname if unknown
+
+The gensec API is supposed to negotiate security without any protocol
+specific input from the caller. This means it doesn't know the Kerberos
+realm for a server when asked to connect; it only knows its hostname.
+
+Generically Kerberos is meant to be able to derive the realm from the
+config file or DNS, but Samba's own config file does not configure this
+data, and Active Directory doesn't have it in DNS. This means that with
+trusted domains, it sometimes ends up guessing the realm incorrectly and
+failing to bind. The circumstances of failure are unclear, but external
+trusts are one example.
+
+Stock Debian doesn't fail with external trusts, however. The difference is
+that they use Heimdal, and the API that resolves a realm from a hostname
+doesn't return an empty result. Instead it guesses from the hostname.
+This patch adds the same logic to Samba when MIT returns an empty result.
+
+In another code path (cli_session_setup_spnego_send), Samba knows which
+realm the server is in, so it forces gensec to use the correct principal.
+If it fails it tries again but disabling Kerberos. The best fix would
+either involve the same logic or fixing the generated krb5.conf to include
+trusted domains, as there may be circumstances where guessing from the
+hostname is incorrect.
+Index: samba/lib/krb5_wrap/krb5_samba.c
+===================================================================
+--- samba.orig/lib/krb5_wrap/krb5_samba.c
++++ samba/lib/krb5_wrap/krb5_samba.c
+@@ -2489,6 +2489,16 @@ char *kerberos_get_principal_from_servic
+ 		realm = smb_krb5_get_default_realm_from_ccache(talloc_tos());
+ 	}
+ 
++	/* Heimdal guesses the realm if it doesn't know; MIT doesn't.
++	 * So if smb_krb5_get_realm_from_hostname failed, guess here.
++	 */
++	if ((realm == NULL || *realm == '\0') && host) {
++		realm = strupper_talloc(talloc_tos(), host + 1);
++		DEBUG(3,("kerberos_get_principal_from_service_hostname: "
++			 "guessing realm %s from hostname %s\n",
++			 realm, remote_name));
++	}
++
+ 	if (realm == NULL || *realm == '\0') {
+ 		realm = talloc_strdup(talloc_tos(), default_realm);
+ 		if (!realm) {

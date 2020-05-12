@@ -1,0 +1,49 @@
+Description: Stop attempting last successful DC first
+ The value for domain->dcname persists, and there is code to retry
+ the last successful DC first. No doubt this is to prevent re-doing all of
+ the initial search, store, connect loops but it has nasty side effects.
+ If a fast DC fails, and it falls back to using a slow dc, even when the
+ saf_cache expires and it should retry to see if the fast/local dc's are
+ back up it will always try to connect to the slow one (if the link is up).
+ This change instead sets domain->dcname to null if the saf_cache has expired
+ causing it to research for a DC to use, meaning it can go back to the local/
+ fast DC's if they are back up.
+ .
+ Also fixed what looks like memory leaks where domain->dcname is overwritten
+ without first free'ing the memory.
+Author: Jonathan Barron <jonathan.barron@smoothwall.net>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: samba/source3/winbindd/winbindd_cm.c
+===================================================================
+--- samba.orig/source3/winbindd/winbindd_cm.c	2016-08-09 09:23:29.582246502 +0100
++++ samba/source3/winbindd/winbindd_cm.c	2016-08-09 09:57:27.534199475 +0100
+@@ -1716,6 +1716,7 @@
+ 				return NT_STATUS_UNSUCCESSFUL;
+ 			}
+ 			if (dcip_to_name(mem_ctx, domain, &ss, &dcname)) {
++				TALLOC_FREE(domain->dcname);
+ 				domain->dcname = talloc_strdup(domain,
+ 							       dcname);
+ 				if (domain->dcname == NULL) {
+@@ -1728,6 +1729,7 @@
+ 					NT_STATUS_UNSUCCESSFUL);
+ 			}
+ 		} else {
++			TALLOC_FREE(domain->dcname);
+ 			domain->dcname = talloc_strdup(domain, saf_servername);
+ 			if (domain->dcname == NULL) {
+ 				TALLOC_FREE(mem_ctx);
+@@ -1735,6 +1737,12 @@
+ 			}
+ 		}
+ 	}
++	else {
++		/* We don't always want to connect to the last successful DC, if the
++		   above check fails then forget who we last connected to */
++		TALLOC_FREE( domain->dcname );
++		domain->dcname = NULL;
++	}
+ 
+ 	for (retries = 0; retries < 3; retries++) {
+ 		int fd = -1;

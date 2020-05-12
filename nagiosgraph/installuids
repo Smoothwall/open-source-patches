@@ -1,0 +1,21 @@
+Author: Stephen Ridley <stephen.ridley@smoothwall.net>
+Description: In the installer, allow users and groups to be specified as
+ arbitrary ids regardless of whether they exist on the system.
+--- a/install.pl
++++ b/install.pl
+@@ -1550,6 +1550,15 @@
+         logmsg('*** chown explicitly disabled');
+         return 0;
+     }
++
++    # Allow the use of arbitrary UIDs and GIDs
++    if (!defined $uid && $uname =~ /^\d+$/ && $uname > 0) {
++        $uid = $uname;
++    }
++    if (!defined $gid && $gname =~ /^\d+$/ && $gname > 0) {
++        $gid = $gname;
++    }
++
+     if (! defined $uid || ! defined $gid) {
+         if (! defined $uid) {
+             logmsg("*** user '$uname' does not exist");

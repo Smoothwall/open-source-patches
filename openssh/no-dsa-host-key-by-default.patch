@@ -1,0 +1,83 @@
+From 3f1016b4535faf6e48aa71e21569aa714a25193f Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Mon, 16 Jan 2017 13:53:04 +0000
+Subject: Remove ssh_host_dsa_key from HostKey default
+
+The client no longer accepts DSA host keys, and servers using the
+default HostKey setting should have better host keys available.
+
+Bug: https://bugzilla.mindrot.org/show_bug.cgi?id=2662
+Bug-Debian: https://bugs.debian.org/850614
+Last-Update: 2017-01-16
+
+Patch-Name: no-dsa-host-key-by-default.patch
+---
+ servconf.c    | 2 --
+ sshd.8        | 7 +++----
+ sshd_config   | 1 -
+ sshd_config.5 | 7 +++----
+ 4 files changed, 6 insertions(+), 11 deletions(-)
+
+diff --git a/servconf.c b/servconf.c
+index 1cee3d6c..202c4506 100644
+--- a/servconf.c
++++ b/servconf.c
+@@ -204,8 +204,6 @@ fill_default_server_options(ServerOptions *options)
+ 		/* fill default hostkeys for protocols */
+ 		options->host_key_files[options->num_host_key_files++] =
+ 		    _PATH_HOST_RSA_KEY_FILE;
+-		options->host_key_files[options->num_host_key_files++] =
+-		    _PATH_HOST_DSA_KEY_FILE;
+ #ifdef OPENSSL_HAS_ECC
+ 		options->host_key_files[options->num_host_key_files++] =
+ 		    _PATH_HOST_ECDSA_KEY_FILE;
+diff --git a/sshd.8 b/sshd.8
+index 38a72540..e8f1fde8 100644
+--- a/sshd.8
++++ b/sshd.8
+@@ -167,11 +167,10 @@ This option must be given if
+ is not run as root (as the normal
+ host key files are normally not readable by anyone but root).
+ The default is
+-.Pa /etc/ssh/ssh_host_dsa_key ,
+-.Pa /etc/ssh/ssh_host_ecdsa_key ,
+-.Pa /etc/ssh/ssh_host_ed25519_key
++.Pa /etc/ssh/ssh_host_rsa_key ,
++.Pa /etc/ssh/ssh_host_ecdsa_key
+ and
+-.Pa /etc/ssh/ssh_host_rsa_key .
++.Pa /etc/ssh/ssh_host_ed25519_key .
+ It is possible to have multiple host key files for
+ the different host key algorithms.
+ .It Fl i
+diff --git a/sshd_config b/sshd_config
+index 13cbe2c6..4aea6c72 100644
+--- a/sshd_config
++++ b/sshd_config
+@@ -16,7 +16,6 @@
+ #ListenAddress ::
+ 
+ #HostKey /etc/ssh/ssh_host_rsa_key
+-#HostKey /etc/ssh/ssh_host_dsa_key
+ #HostKey /etc/ssh/ssh_host_ecdsa_key
+ #HostKey /etc/ssh/ssh_host_ed25519_key
+ 
+diff --git a/sshd_config.5 b/sshd_config.5
+index 703a9cdd..8f8fbb66 100644
+--- a/sshd_config.5
++++ b/sshd_config.5
+@@ -733,11 +733,10 @@ is not to load any certificates.
+ Specifies a file containing a private host key
+ used by SSH.
+ The defaults are
+-.Pa /etc/ssh/ssh_host_dsa_key ,
+-.Pa /etc/ssh/ssh_host_ecdsa_key ,
+-.Pa /etc/ssh/ssh_host_ed25519_key
++.Pa /etc/ssh/ssh_host_rsa_key ,
++.Pa /etc/ssh/ssh_host_ecdsa_key
+ and
+-.Pa /etc/ssh/ssh_host_rsa_key .
++.Pa /etc/ssh/ssh_host_ed25519_key .
+ .Pp
+ Note that
+ .Xr sshd 8

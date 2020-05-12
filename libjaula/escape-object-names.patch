@@ -1,0 +1,23 @@
+Author: Stephen Lynch <stephen.lynch@smoothwall.net>
+Description: Escape json object names
+--- a/jaula/jaula_value_object.cc
++++ b/jaula/jaula_value_object.cc
+@@ -36,6 +36,7 @@
+ 
+ 
+ #include <jaula/jaula_value_object.h>
++#include <jaula/jaula_value_string.h>
+ 
+ namespace JAULA
+ {                                // namespace JAULA
+@@ -70,8 +71,8 @@
+     {
+       if (it != data_.begin())
+         ostr << ", ";
+-      ostr << '"' << it->first << '"'
+-        << " : " << *(it->second);
++      ostr << Value_String(it->first)
++         << " : " << *(it->second);
+     }
+     ostr << " }";
+   }

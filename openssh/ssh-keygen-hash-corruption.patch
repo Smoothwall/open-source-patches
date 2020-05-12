@@ -1,0 +1,44 @@
+From 78800aa252da1ebbfb55f7e593f43c337e694cc3 Mon Sep 17 00:00:00 2001
+From: "djm@openbsd.org" <djm@openbsd.org>
+Date: Fri, 3 Mar 2017 06:13:11 +0000
+Subject: upstream commit
+
+fix ssh-keygen -H accidentally corrupting known_hosts that
+contained already-hashed entries. HKF_MATCH_HOST_HASHED is only set by
+hostkeys_foreach() when hostname matching is in use, so we need to look for
+the hash marker explicitly.
+
+Upstream-ID: da82ad653b93e8a753580d3cf5cd448bc2520528
+
+Origin: https://anongit.mindrot.org/openssh.git/commit/?id=12d3767ba4c84c32150cbe6ff6494498780f12c9
+Bug-Debian: https://bugs.debian.org/851734
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1668093
+Last-Update: 2017-03-09
+
+Patch-Name: ssh-keygen-hash-corruption.patch
+---
+ ssh-keygen.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ssh-keygen.c b/ssh-keygen.c
+index 2a7939bf..0833ee61 100644
+--- a/ssh-keygen.c
++++ b/ssh-keygen.c
+@@ -1082,6 +1082,7 @@ known_hosts_hash(struct hostkey_foreach_line *l, void *_ctx)
+ 	struct known_hosts_ctx *ctx = (struct known_hosts_ctx *)_ctx;
+ 	char *hashed, *cp, *hosts, *ohosts;
+ 	int has_wild = l->hosts && strcspn(l->hosts, "*?!") != strlen(l->hosts);
++	int was_hashed = l->hosts[0] == HASH_DELIM;
+ 
+ 	switch (l->status) {
+ 	case HKF_STATUS_OK:
+@@ -1090,8 +1091,7 @@ known_hosts_hash(struct hostkey_foreach_line *l, void *_ctx)
+ 		 * Don't hash hosts already already hashed, with wildcard
+ 		 * characters or a CA/revocation marker.
+ 		 */
+-		if ((l->match & HKF_MATCH_HOST_HASHED) != 0 ||
+-		    has_wild || l->marker != MRK_NONE) {
++		if (was_hashed || has_wild || l->marker != MRK_NONE) {
+ 			fprintf(ctx->out, "%s\n", l->line);
+ 			if (has_wild && !find_host) {
+ 				logit("%s:%ld: ignoring host name "

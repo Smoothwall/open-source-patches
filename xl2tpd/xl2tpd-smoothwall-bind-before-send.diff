@@ -1,0 +1,214 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Make XL2TP support connections to alias (secondary) addresses
+ by storing the inbound destination IP against the client tuple. When
+ sending out packets, lookup the original destination and bind to that
+ address prior to transmitting packets. Note that the list elements
+ are never freed, owing to the complexities that this would involve.
+ Since the port is only useable once an IPSec tunnel has been created,
+ this is not thought to be an issue.
+--- a/network.c
++++ b/network.c
+@@ -66,6 +66,13 @@
+         return -EINVAL;
+     }
+ 
++    /* Set the socket to recieve IP packet info via recvmsg */
++    const int on=1;
++    if(setsockopt(server_socket, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0){
++        l2tp_log(LOG_CRIT, "setsockopt IP_PKTINFO: %s\n", strerror(errno));
++        return -EINVAL;
++    }
++
+ #ifdef LINUX
+     /*
+      * For L2TP/IPsec with KLIPSng, set the socket to receive IPsec REFINFO
+@@ -256,14 +263,100 @@
+     }
+ }
+ 
++struct from_pktinfo
++{
++	struct sockaddr_in from;
++	struct in_pktinfo pktinfo;
++	struct from_pktinfo *next;
++};
++
++/* Our list of peer address to local address mappings. */
++struct from_pktinfo *from_pktinfo_list = NULL;
++
++static void save_pktinfo(struct sockaddr_in from, struct in_pktinfo pktinfo)
++{
++	char fromstr[INET_ADDRSTRLEN];
++	char pktinfostr[INET_ADDRSTRLEN];
++
++	fromstr[INET_ADDRSTRLEN - 1] = '\0';
++	pktinfostr[INET_ADDRSTRLEN - 1] = '\0';
++
++	strncpy(fromstr, inet_ntoa(from.sin_addr), INET_ADDRSTRLEN - 1);
++	strncpy(pktinfostr, inet_ntoa(pktinfo.ipi_addr), INET_ADDRSTRLEN - 1);
++
++	l2tp_log(LOG_DEBUG, "Saving '%s:%d' peer, into  pktinfo as '%s' on iface '%d'\n",
++		fromstr, ntohs(from.sin_port), pktinfostr, pktinfo.ipi_ifindex);
++
++	struct from_pktinfo *node;
++
++	/* See if we have a node for this peer address already. */
++	for (node = from_pktinfo_list; node; node = node->next) {
++		/* If we do, then update it but don't amke a new one.
++		 * Just update the current one and get out.  */
++		if ((node->from.sin_addr.s_addr == from.sin_addr.s_addr) &&
++			(node->from.sin_port == from.sin_port))
++		{
++			l2tp_log(LOG_DEBUG, "Already seen this peer, updating local pktinfo\n");
++			node->pktinfo = pktinfo;
++			return;
++		}
++	}
++
++	/* Allocate and populate the new node. */
++	struct from_pktinfo *new_node = malloc(sizeof(struct from_pktinfo));
++	new_node->from = from;
++	new_node->pktinfo = pktinfo;
++
++	/* Insert the new node at the head of the list. */
++	new_node->next = from_pktinfo_list;
++	from_pktinfo_list = new_node;
++
++	/* The new node is never freed. */
++}
++
++static struct in_pktinfo find_pktinfo(struct sockaddr_in from)
++{
++	struct from_pktinfo *node;
++
++	l2tp_log(LOG_DEBUG, "Looking for peer '%s:%d'\n",
++		inet_ntoa(from.sin_addr), ntohs(from.sin_port));
++
++	/* Scan for the list, returning the matched pktiinfo if we find
++	 * this from socket address. */
++	for (node = from_pktinfo_list; node; node = node->next)
++	{
++		if ((node->from.sin_addr.s_addr == from.sin_addr.s_addr) && (node->from.sin_port == from.sin_port))
++		{
++			l2tp_log(LOG_DEBUG, "Found pktinfo addr '%s' on iface '%d'\n",
++				inet_ntoa(node->pktinfo.ipi_addr), node->pktinfo.ipi_ifindex);
++			return node->pktinfo;
++		}
++	}
++
++	l2tp_log(LOG_INFO, "Could not find where to send request pkt from\n");
++
++	/* Otherwise we didn't find anything so return a "blank" structure. */
++	struct in_pktinfo empty_pktinfo;
++	memset(&empty_pktinfo, 0, sizeof(struct in_pktinfo));
++
++	return empty_pktinfo;
++}
++
+ void udp_xmit (struct buffer *buf, struct tunnel *t)
+ {
+-    struct cmsghdr *cmsg;
++    struct cmsghdr *cmsg = NULL;
++    struct in_pktinfo *ppktinfo = NULL;
++    struct in_pktinfo pktinfo = find_pktinfo(buf->peer);
+     char cbuf[CMSG_SPACE(sizeof (unsigned int))];
+     unsigned int *refp;
+     struct msghdr msgh;
+     int err;
+     struct iovec iov;
++    char fromstr[INET_ADDRSTRLEN];
++    char pktinfostr[INET_ADDRSTRLEN];
++
++    fromstr[INET_ADDRSTRLEN - 1] = '\0';
++    pktinfostr[INET_ADDRSTRLEN - 1] = '\0';
+     
+     /*
+      * OKAY, now send a packet with the right SAref values.
+@@ -289,7 +382,27 @@
+ 
+ 	msgh.msg_controllen = cmsg->cmsg_len;
+     }
+-    
++
++    msgh.msg_controllen += CMSG_SPACE(sizeof(struct in_pktinfo));
++    if (cmsg)
++        cmsg = CMSG_NXTHDR(&msgh, cmsg);
++    else
++        cmsg = CMSG_FIRSTHDR(&msgh);
++
++    cmsg->cmsg_level = IPPROTO_IP;
++    cmsg->cmsg_type = IP_PKTINFO;
++    cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
++
++    ppktinfo = (struct in_pktinfo*) CMSG_DATA(cmsg);
++    ppktinfo->ipi_ifindex = pktinfo.ipi_ifindex;
++    ppktinfo->ipi_spec_dst = pktinfo.ipi_addr;
++
++    strncpy(fromstr, inet_ntoa(buf->peer.sin_addr), INET_ADDRSTRLEN - 1);
++    strncpy(pktinfostr, inet_ntoa(pktinfo.ipi_addr), INET_ADDRSTRLEN - 1);
++
++    l2tp_log(LOG_DEBUG, "Sending Pkt from '%s' to '%s:%d' on iface index '%d'\n", pktinfostr,
++      fromstr, ntohs(buf->peer.sin_port), pktinfo.ipi_ifindex);
++
+     iov.iov_base = buf->start;
+     iov.iov_len  = buf->len;
+ 
+@@ -377,7 +490,7 @@
+      * our network socket.  Control handling is no longer done here.
+      */
+     struct sockaddr_in from, to;
+-    unsigned int fromlen, tolen;
++    unsigned int fromlen;
+     int tunnel, call;           /* Tunnel and call */
+     int recvsize;               /* Length of data received */
+     struct buffer *buf;         /* Payload buffer */
+@@ -443,7 +556,6 @@
+ 	    memset(&to,   0, sizeof(to));
+ 	    
+ 	    fromlen = sizeof(from);
+-	    tolen   = sizeof(to);
+ 	    
+ 	    memset(&msgh, 0, sizeof(struct msghdr));
+ 	    iov.iov_base = buf->start;
+@@ -479,21 +591,27 @@
+ 
+ 	    refme=refhim=0;
+ 
+-	    /* extract IPsec info out */
+-	    if(gconfig.ipsecsaref) {
+-		    struct cmsghdr *cmsg;
+-		    /* Process auxiliary received data in msgh */
+-		    for (cmsg = CMSG_FIRSTHDR(&msgh);
+-			 cmsg != NULL;
+-			 cmsg = CMSG_NXTHDR(&msgh,cmsg)) {
+-			    if (cmsg->cmsg_level == IPPROTO_IP
+-				&& cmsg->cmsg_type == gconfig.sarefnum) {
+-				    unsigned int *refp;
++	    /* extract IPsec info out and theinbound address */
++	    struct cmsghdr *cmsg;
++	    /* Process auxiliary received data in msgh */
++	    for (cmsg = CMSG_FIRSTHDR(&msgh);
++		 cmsg != NULL;
++		 cmsg = CMSG_NXTHDR(&msgh,cmsg)) {
++
++		    if (gconfig.ipsecsaref && cmsg->cmsg_level == IPPROTO_IP
++			&& cmsg->cmsg_type == gconfig.sarefnum) {
++			    unsigned int *refp;
+ 				    
+-				    refp = (unsigned int *)CMSG_DATA(cmsg);
+-				    refme =refp[0];
+-				    refhim=refp[1];
+-			    }
++			    refp = (unsigned int *)CMSG_DATA(cmsg);
++			    refme =refp[0];
++			    refhim=refp[1];
++		    }
++		    /* Extract the packet's destination address, saving it
++		     * with the client address. */
++		    if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
++		    	struct in_pktinfo pktinfo;
++			memcpy(&pktinfo, (struct in_pktinfo*)CMSG_DATA(cmsg), sizeof(struct in_pktinfo));
++			save_pktinfo(from, pktinfo);
+ 		    }
+ 	    }
+ 

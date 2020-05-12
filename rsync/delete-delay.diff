@@ -1,0 +1,18 @@
+error message when using --delete-delay is not correct.
+
+--- a/flist.c
++++ b/flist.c
+@@ -1796,7 +1796,12 @@
+ 	/* This (sadly) can only happen when pushing data because
+ 	 * the sender does not know about what kind of delete
+ 	 * is in effect on the receiving side when pulling. */
+-	rprintf(FERROR_XFER, "FATAL I/O ERROR: dying to avoid a --delete-during issue with a pre-3.0.7 receiver.\n");
++	if(delete_during == 2) {
++		rprintf(FERROR_XFER, "FATAL I/O ERROR: dying to avoid a --delete-delay issue with a pre-3.0.7 receiver.\n");
++	}
++	else {
++		rprintf(FERROR_XFER, "FATAL I/O ERROR: dying to avoid a --delete-during issue with a pre-3.0.7 receiver.\n");
++	}
+ 	exit_cleanup(RERR_UNSUPPORTED);
+ }
+ 

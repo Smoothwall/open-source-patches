@@ -1,0 +1,62 @@
+Author: Andrew Bartlett <andrew.bartlett@samba.org>
+Description:
+ Fixes a memory leak in ntlm_auth associated with DNS names.
+
+ See: https://bugzilla.samba.org/show_bug.cgi?id=10396
+--- a/source3/auth/auth_generic.c
++++ b/source3/auth/auth_generic.c
+@@ -246,7 +246,7 @@
+ 		 * This is used for the NTLMSSP server
+ 		 *
+ 		 */
+-		dns_name = get_mydnsfullname();
++		dns_name = get_mydnsfullname_talloc(tmp_ctx);
+ 		if (dns_name == NULL) {
+ 			dns_name = "";
+ 		}
+--- a/source3/include/proto.h
++++ b/source3/include/proto.h
+@@ -619,6 +619,8 @@
+ 		     mode_t dir_perms);
+ int create_tcpip_socket(const struct sockaddr_storage *ifss, uint16_t *port);
+ const char *get_mydnsfullname(void);
++struct TALLOC_CTX;
++const char *get_mydnsfullname_talloc(struct TALLOC_CTX *ctx);
+ bool is_myname_or_ipaddr(const char *s);
+ struct tevent_req *getaddrinfo_send(TALLOC_CTX *mem_ctx,
+ 				    struct tevent_context *ev,
+--- a/source3/lib/util.c
++++ b/source3/lib/util.c
+@@ -548,7 +548,7 @@
+ 	const char *domname;
+ 	char *p;
+ 
+-	domname = get_mydnsfullname();
++	domname = get_mydnsfullname_talloc(ctx);
+ 	if (!domname) {
+ 		return NULL;
+ 	}
+--- a/source3/lib/util_sock.c
++++ b/source3/lib/util_sock.c
+@@ -1276,6 +1276,12 @@
+ 
+ const char *get_mydnsfullname(void)
+ {
++	return get_mydnsfullname_talloc(talloc_tos());
++}
++
++
++const char *get_mydnsfullname_talloc(struct TALLOC_CTX *ctx)
++{
+ 	struct addrinfo *res = NULL;
+ 	char my_hostname[HOST_NAME_MAX];
+ 	bool ret;
+@@ -1332,7 +1338,7 @@
+ 	if (!memcache_lookup(NULL, SINGLETON_CACHE,
+ 			data_blob_string_const_null("get_mydnsfullname"),
+ 			&tmp)) {
+-		tmp = data_blob_talloc(talloc_tos(), res->ai_canonname,
++		tmp = data_blob_talloc(ctx, res->ai_canonname,
+ 				strlen(res->ai_canonname) + 1);
+ 	}
+ 

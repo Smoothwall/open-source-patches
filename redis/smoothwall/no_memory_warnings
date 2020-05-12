@@ -1,0 +1,19 @@
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+Description: Downgrade warnings about the kernel memory configuration
+  as we have small redis instances and are not concerned by these issues
+  and we don't want them worrying our customers.
+--- a/src/server.c
++++ b/src/server.c
+@@ -3605,10 +3605,10 @@
+ 
+ void linuxMemoryWarnings(void) {
+     if (linuxOvercommitMemoryValue() == 0) {
+-        serverLog(LL_WARNING,"WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.");
++        serverLog(LL_NOTICE,"WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.");
+     }
+     if (THPIsEnabled()) {
+-        serverLog(LL_WARNING,"WARNING you have Transparent Huge Pages (THP) support enabled in your kernel. This will create latency and memory usage issues with Redis. To fix this issue run the command 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' as root, and add it to your /etc/rc.local in order to retain the setting after a reboot. Redis must be restarted after THP is disabled.");
++        serverLog(LL_NOTICE,"WARNING you have Transparent Huge Pages (THP) support enabled in your kernel. This will create latency and memory usage issues with Redis. To fix this issue run the command 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' as root, and add it to your /etc/rc.local in order to retain the setting after a reboot. Redis must be restarted after THP is disabled.");
+     }
+ }
+ #endif /* __linux__ */

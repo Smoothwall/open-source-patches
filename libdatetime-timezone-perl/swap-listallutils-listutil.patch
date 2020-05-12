@@ -1,0 +1,21 @@
+Author: Kayvan Javid (kayvan.javid@smoothwall.net)
+Description: The latest version has problem finding current timezone
+	For some reason the original author has modified observance.pm
+	to use List::AllUtils.  This causes Smoothwall and other systems
+	to fail when calling:
+	DateTime::TimeZone::Local::Timezone()->name()
+	This has been bugged upstream on CPAN:
+	https://rt.cpan.org/Public/Bug/Display.html?id=97227
+diff --git a/lib/DateTime/TimeZone/OlsonDB/Observance.pm b/lib/DateTime/TimeZone/OlsonDB/Observance.pm
+index cfe662d..3f0eb25 100644
+--- a/lib/DateTime/TimeZone/OlsonDB/Observance.pm
++++ b/lib/DateTime/TimeZone/OlsonDB/Observance.pm
+@@ -7,7 +7,7 @@ use DateTime::Duration;
+ use DateTime::TimeZone::OlsonDB;
+ use DateTime::TimeZone::OlsonDB::Change;
+ 
+-use List::AllUtils qw( any first );
++use List::Util qw( first );
+ use Params::Validate qw( validate SCALAR ARRAYREF UNDEF OBJECT );
+ 
+ sub new {

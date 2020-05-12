@@ -1,0 +1,30 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Bind to the source interface for sending IKE replies to ensure
+ they are sent the right way where multiple routes exist.
+--- a/programs/pluto/server.c
++++ b/programs/pluto/server.c
+@@ -1235,6 +1235,7 @@
+ 	const u_int8_t *ptr;
+ 	size_t len = natt_bonus + alen + blen;
+ 	ssize_t wlen;
++	struct ifreq interface;
+ 
+ 	if (len > MAX_OUTPUT_UDP_SIZE) {
+ 		DBG_log("send_ike_msg(): really too big %zu bytes", len);
+@@ -1277,6 +1278,16 @@
+ 	(void) check_msg_errqueue(st->st_interface, POLLOUT);
+ #endif  /* defined(IP_RECVERR) && defined(MSG_ERRQUEUE) */
+ 
++	memset(&interface, 0, sizeof(interface));
++	strncpy(interface.ifr_ifrn.ifrn_name, st->st_interface->ip_dev->id_rname, IFNAMSIZ - 1);
++	if (setsockopt(st->st_interface->fd, SOL_SOCKET, SO_BINDTODEVICE,
++		(char *)&interface, sizeof(interface)) < 0)
++	{
++		LOG_ERRNO(errno, "setsockopt SO_BINDTODEVICE to %s failed",
++		st->st_interface->ip_dev->id_rname);
++		return FALSE;
++	}
++
+ 	wlen = sendto(st->st_interface->fd,
+ 		      ptr,
+ 		      len, 0,

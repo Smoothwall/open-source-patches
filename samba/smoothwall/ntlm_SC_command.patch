@@ -1,0 +1,52 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Add SC command to NTLM and Negotiate
+ Adds a SC command which lets Guardian choose and set the NTLM
+ challenge, which allows us to make the helper stateless.
+Index: samba/source3/utils/ntlm_auth.c
+===================================================================
+--- samba.orig/source3/utils/ntlm_auth.c	2016-08-12 10:09:17.505944468 +0100
++++ samba/source3/utils/ntlm_auth.c	2016-08-12 10:09:17.505944468 +0100
+@@ -176,6 +176,9 @@
+ const char *opt_target_service;
+ const char *opt_target_hostname;
+ 
++static uint8_t sc_challenge[8];
++static bool sc_challenge_set = false;
++
+ 
+ /* This is a bit hairy, but the basic idea is to do a password callback
+    to the calling application.  The callback comes from within gensec */
+@@ -1281,6 +1284,19 @@
+ 		x_fprintf(x_stdout, "BH Command expected\n");
+ 		data_blob_free(&in);
+ 		return;
++	} else if ( (strncmp(buf, "SC ", 3) == 0)) {
++		/* Guardian has set the eight-byte challenge */
++		if (in.length == 8) {
++			/* Remember what the challenge is for when we create the state.
++			 * (Guardian sends SC before YR, and YR resets the state.) */
++			memcpy(sc_challenge, in.data, 8);
++			sc_challenge_set = true;
++			x_fprintf(x_stdout, "SC\n");
++		} else {
++			x_fprintf(x_stdout, "BH SC requires exactly eight bytes\n");
++		}
++		data_blob_free(&in);
++		return;
+ 	} else if ( (strncmp(buf, "TT ", 3) != 0) &&
+ 		    (strncmp(buf, "KK ", 3) != 0) &&
+ 		    (strncmp(buf, "AF ", 3) != 0) &&
+@@ -1376,6 +1392,13 @@
+ 				talloc_free(mem_ctx);
+ 				return;
+ 			}
++			/* If we'd had a challenge set by SC, use it for this state */
++			if(sc_challenge_set) {
++				state->gensec_state->auth_context->set_ntlm_challenge(
++					state->gensec_state->auth_context,
++					sc_challenge,
++					"SC command");
++			}
+ 			break;
+ 		}
+ 		default:

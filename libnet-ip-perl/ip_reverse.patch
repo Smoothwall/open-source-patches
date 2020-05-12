@@ -1,0 +1,46 @@
+Author: Nicholas Bamber <nicholas@periapt.co.uk>
+Bug: http://rt.cpan.org/Public/Bug/Display.html?d=42793
+Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=623681
+Subject: ip_reverse() for IPv4 ignores prefixlen parameter
+ The problem particularly occurs where there are a lot of zeros
+ in the less significant quads. You can use a /number to force
+ retention of those quads in the reversed address but the code
+ was ignoring that instruction. There is some ambiguity over what
+ should happen when the number of bits specified does not fall
+ on a boundary. I have tested with Net::IP::XS and tried to follow
+ what they do.
+Last-Update: 2011-05-11
+--- /dev/null
++++ b/t/reverse_ip.t
+@@ -0,0 +1,13 @@
++use Test::More tests=>4;
++use Net::IP;
++
++my $obj = Net::IP->new('10.10.0.0/31');
++is($obj->reverse_ip, '0.10.10.in-addr.arpa.', 'reverse_ip');
++$obj->set('192.168.0.0/24');
++is($obj->reverse_ip, '0.168.192.in-addr.arpa.', 'reverse_ip');
++$obj->set('192.0.0.0/24');
++is($obj->reverse_ip, '0.0.192.in-addr.arpa.', 'reverse_ip');
++$obj->set('192.0.0.0/32');
++is($obj->reverse_ip, '0.0.0.192.in-addr.arpa.', 'reverse_ip');
++
++
+--- a/IP.pm
++++ b/IP.pm
+@@ -1843,12 +1843,13 @@
+ 
+     if ($ip_version == 4) {
+         my @quads    = split /\./, $ip;
+-        my $no_quads = ($len / 8);
++        my $no_quads = 4 - int($len / 8);
+ 
+         my @reverse_quads = reverse @quads;
+ 
+-        while (@reverse_quads and $reverse_quads[0] == 0) {
++        while (@reverse_quads and $reverse_quads[0] == 0 and $no_quads > 0) {
+             shift(@reverse_quads);
++            --$no_quads;
+         }
+ 
+         return join '.', @reverse_quads, 'in-addr', 'arpa.';

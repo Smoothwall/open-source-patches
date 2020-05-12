@@ -1,0 +1,17 @@
+Description: Disable FORTIFY_SOURCE flag when using long jump implementation
+Origin: vendor
+Forwarded: not-needed
+Author: Alessandro Ghedini <ghedo@debian.org>
+Reviewed-by: Xavier Guimard <x.guimard@free.fr>
+Last-Update: 2014-09-15
+
+--- a/Coro/Makefile.PL
++++ b/Coro/Makefile.PL
+@@ -220,6 +220,7 @@
+    conftest ("TEST_makecontext");
+ } elsif ($iface eq "s") {
+    $DEFINE .= " -DCORO_SJLJ";
++   $DEFINE .= " -D_FORTIFY_SOURCE=0";
+    print "\nUsing setjmp/longjmp/sigaltstack implementation\n\n";
+    conftest ("TEST_sigaltstack");
+ } elsif ($iface eq "l") {

@@ -1,0 +1,15 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Call logipsecevent.pl to log IPSec events to syslog, comments in
+ the modified file recommend configuring *swan to use another file, may be worth
+ investigating in some future Tunnel work.
+--- a/programs/_updown/_updown.in
++++ b/programs/_updown/_updown.in
+@@ -136,6 +136,8 @@
+ 	;;
+ esac
+ 
++/modules/tunnel/usr/bin/smoothwall/logipsecevent.pl $PLUTO_VERB $PLUTO_CONNECTION
++
+ if [ -x @IPSEC_EXECDIR@/_updown.${PLUTO_STACK} ]; then
+     exec @IPSEC_EXECDIR@/_updown.${PLUTO_STACK} $*
+ else

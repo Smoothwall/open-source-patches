@@ -1,0 +1,22 @@
+From: intrigeri <intrigeri@boum.org>
+Date: Sat, 21 Mar 2015 00:53:35 +0000
+Subject: Fix spelling error in POD.
+Forwarded: https://gitlab.com/berrange/perl-net-dbus/merge_requests/1 
+
+---
+ lib/Net/DBus/BaseObject.pm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/Net/DBus/BaseObject.pm b/lib/Net/DBus/BaseObject.pm
+index e3b5dda..9d8b115 100644
+--- a/lib/Net/DBus/BaseObject.pm
++++ b/lib/Net/DBus/BaseObject.pm
+@@ -501,7 +501,7 @@ of property reads and writes. The C<$name> parameter is the name
+ of the property being accessed. If C<$newvalue> is supplied then
+ the property is to be updated, otherwise the current value is to
+ be returned. The default implementation will simply raise an
+-error, so must be overriden in subclasses.
++error, so must be overridden in subclasses.
+ 
+ =cut
+ 

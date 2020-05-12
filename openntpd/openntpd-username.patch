@@ -1,0 +1,11 @@
+--- a/ntpd.h
++++ b/ntpd.h
+@@ -31,7 +31,7 @@
+ #include "ntp.h"
+ 
+ #ifndef NTPD_USER
+-#define	NTPD_USER	"_ntp"
++#define	NTPD_USER	"ntpd"
+ #endif
+ #define	CONFFILE	SYSCONFDIR "/ntpd.conf"
+ #ifndef DRIFTFILE

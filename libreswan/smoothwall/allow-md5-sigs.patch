@@ -1,0 +1,14 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Force NSS (in Pluto) to accept certificates with MD5 signatures as
+ we STILL generate them for all tunnels.
+--- a/programs/_plutorun/_plutorun.in
++++ b/programs/_plutorun/_plutorun.in
+@@ -43,7 +43,7 @@
+ exec 1>/dev/null
+ exec 2>/dev/null
+ 
+-${execdir}/pluto ${PLUTO_OPTIONS}
++NSS_HASH_ALG_SUPPORT="+MD5" ${execdir}/pluto ${PLUTO_OPTIONS}
+ status=$?
+ case "$status" in
+     10)

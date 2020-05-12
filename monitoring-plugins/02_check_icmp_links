@@ -1,0 +1,30 @@
+## 02_check_icmp_links by Jan Wagner <waja@cyconet.org>
+##
+## DP: Create symlinks for check_icmp to provide default values for some situations
+
+diff -urNad nagios-plugins-1.4.14~/plugins-root/Makefile.am nagios-plugins-1.4.14/plugins-root/Makefile.am
+--- nagios-plugins-1.4.14~/plugins-root/Makefile.am	2008-11-30 22:23:18.000000000 +0100
++++ nagios-plugins-1.4.14/plugins-root/Makefile.am	2010-01-10 20:39:03.000000000 +0100
+@@ -71,7 +71,8 @@
+ 	else \
+ 	  echo "WARNING: insufficient access; not installing setuid plugins"; \
+ 	  echo "NOTE: to install setuid plugins, run 'make install-root' as root"; \
+-	fi
++	fi ; \
++	if [ -x $(DESTDIR)$(libexecdir)/check_icmp ] ; then rm -f $(DESTDIR)$(libexecdir)/check_host $(DESTDIR)$(libexecdir)/check_rta_multi ; ln -s check_icmp $(DESTDIR)$(libexecdir)/check_host ; ln -s check_icmp $(DESTDIR)$(libexecdir)/check_rta_multi ; fi
+ 
+ # /* Author Coreutils team sub-citation */
+ 
+diff -urNad nagios-plugins-1.4.14~/plugins-root/Makefile.in nagios-plugins-1.4.14/plugins-root/Makefile.in
+--- nagios-plugins-1.4.14~/plugins-root/Makefile.in	2009-09-16 10:37:59.000000000 +0200
++++ nagios-plugins-1.4.14/plugins-root/Makefile.in	2010-01-10 20:39:13.000000000 +0100
+@@ -1162,7 +1162,8 @@
+ 	else \
+ 	  echo "WARNING: insufficient access; not installing setuid plugins"; \
+ 	  echo "NOTE: to install setuid plugins, run 'make install-root' as root"; \
+-	fi
++	fi ; \
++	if [ -x $(DESTDIR)$(libexecdir)/check_icmp ] ; then rm -f $(DESTDIR)$(libexecdir)/check_host $(DESTDIR)$(libexecdir)/check_rta_multi ; ln -s check_icmp $(DESTDIR)$(libexecdir)/check_host ; ln -s check_icmp $(DESTDIR)$(libexecdir)/check_rta_multi ; fi
+ 
+ clean-local:
+ 	rm -f NP-VERSION-FILE

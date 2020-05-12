@@ -1,0 +1,25 @@
+Author: Vytas Dauksa <vytas.dauksa@smoothwall.net>
+Description: Makes /var/run/pluto world readable.
+ In Openswan v2.6.38 setup started checking that /var/run/pluto/ dir would be chmod 700. This is unfortunate to us, because we check if pluto is running in vpn->control.cgi by checking if /var/run/pluto/pluto.pid exists.
+--- a/programs/setup/setup.in
++++ b/programs/setup/setup.in
+@@ -52,7 +52,7 @@
+     start|--start|_autostart)
+ 	# preliminaries
+ 	mkdir -p ${rundir}
+-	chmod 700 ${rundir} > /dev/null 2>/dev/null
++	chmod 755 ${rundir} > /dev/null 2>/dev/null
+ 	# starting a stack will unload any loaded stack first (same or different stack)
+ 	[ -f /proc/modules ] && ipsec _stackmanager start
+ 	# Finally start the pluto daemon in a restart loop
+--- a/initsystems/sysvinit/ipsec.init.in
++++ b/initsystems/sysvinit/ipsec.init.in
+@@ -99,7 +99,7 @@
+ export PATH
+ 
+ mkdir -p ${rundir}
+-chmod 700 ${rundir}
++chmod 755 ${rundir}
+ 
+ verify_config() {
+     [ -f ${IPSEC_CONF} ] || exit 6

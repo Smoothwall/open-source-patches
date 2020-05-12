@@ -1,0 +1,15 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Disable failing TLS unit test
+ It's probably broken because our ca-certificates package isn't
+ correct, and wasn't corrected during Debianization work.
+--- a/test/parallel/test-tls-pfx-gh-5100-regr.js
++++ b/test/parallel/test-tls-pfx-gh-5100-regr.js
+@@ -1,5 +1,8 @@
+ 'use strict';
+ 
++console.log('1..0 # Skipped: Smoothwall has broken ca-certificates');
++return;
++
+ const common = require('../common');
+ 
+ if (!common.hasCrypto) {

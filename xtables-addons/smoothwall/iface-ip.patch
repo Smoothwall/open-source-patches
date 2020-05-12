@@ -1,0 +1,129 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Adds options for checking if interfaces have IP addresses to the
+ iptables 'iface' match.
+--- a/extensions/xt_iface.c
++++ b/extensions/xt_iface.c
+@@ -5,12 +5,15 @@
+  */
+ 
+ #include <linux/if.h>
++#include <linux/inetdevice.h>
++#include <linux/list.h>
+ #include <linux/module.h>
+ #include <linux/moduleparam.h>
+ #include <linux/netdevice.h>
+ #include <linux/skbuff.h>
+ #include <linux/version.h>
+ #include <linux/netfilter/x_tables.h>
++#include <net/if_inet6.h>
+ #include "xt_iface.h"
+ #include "compat_xtables.h"
+ 
+@@ -64,6 +67,30 @@
+ 	return true;
+ }
+ 
++static bool iface_addrtest(const struct net_device *dev, unsigned int flags,
++    unsigned int invflags)
++{
++	rcu_read_lock();
++
++	struct in_device *ip_ptr = rcu_dereference(dev->ip_ptr);
++	bool has_v4_ip = (ip_ptr != NULL && ip_ptr->ifa_list != NULL);
++
++	struct inet6_dev *ip6_ptr = rcu_dereference(dev->ip6_ptr);
++	bool has_v6_ip = (ip6_ptr != NULL && !list_empty(&(ip6_ptr->addr_list)));
++
++	rcu_read_unlock();
++
++	if((flags & XT_IFACE_IPV4_ADDR)
++	    && !(has_v4_ip ^ !!(invflags & XT_IFACE_IPV4_ADDR)))
++		return false;
++
++	if((flags & XT_IFACE_IPV6_ADDR)
++	    && !(has_v6_ip ^ !!(invflags & XT_IFACE_IPV6_ADDR)))
++		return false;
++
++	return true;
++}
++
+ static bool xt_iface_mt(const struct sk_buff *skb,
+     struct xt_action_param *par)
+ {
+@@ -74,7 +101,8 @@
+ 
+ 	if (dev == NULL)
+ 		return false;
+-	retval = iface_flagtest(dev->flags, info->flags, info->invflags);
++	retval = iface_flagtest(dev->flags, info->flags, info->invflags)
++		&& iface_addrtest(dev, info->flags, info->invflags);
+ 	if (put != NULL)
+ 		dev_put(put);
+ 	return retval;
+--- a/extensions/xt_iface.h
++++ b/extensions/xt_iface.h
+@@ -15,6 +15,8 @@
+ 	XT_IFACE_DORMANT     = 1 << 10,
+ 	XT_IFACE_DEV_IN      = 1 << 11,
+ 	XT_IFACE_DEV_OUT     = 1 << 12,
++	XT_IFACE_IPV4_ADDR   = 1 << 13,
++	XT_IFACE_IPV6_ADDR   = 1 << 14,
+ };
+ 
+ struct xt_iface_mtinfo {
+--- a/extensions/libxt_iface.c
++++ b/extensions/libxt_iface.c
+@@ -39,6 +39,8 @@
+ 	{.name = "dynamic",      .has_arg = false, .val = 'd'},
+ 	{.name = "lower-up",     .has_arg = false, .val = 'w'},
+ 	{.name = "dormant",      .has_arg = false, .val = 'a'},
++	{.name = "iface-ipv4",   .has_arg = false, .val = '4'},
++	{.name = "iface-ipv6",   .has_arg = false, .val = '6'},
+ 	{NULL},
+ };
+ 
+@@ -85,7 +87,9 @@
+ 	"[!] --multicast           match if MULTICAST flag (not) set\n"
+ 	"[!] --dynamic             match if DYNAMIC flag (not) set\n"
+ 	"[!] --lower-up            match if LOWER_UP flag (not) set\n"
+-	"[!] --dormant             match if DORMANT flag (not) set\n");
++	"[!] --dormant             match if DORMANT flag (not) set\n"
++	"[!] --iface-ipv4          match if interface has one or more IPv4 addresses\n"
++	"[!] --iface-ipv6          match if interface has one or more IPv6 addresses\n");
+ }
+ 
+ static int iface_mt_parse(int c, char **argv, int invert, unsigned int *flags,
+@@ -160,6 +164,12 @@
+ 	case 'a': /* DORMANT */
+ 		iface_setflag(info, flags, invert, XT_IFACE_DORMANT, "dormant");
+ 		return true;
++	case '4': /* --iface-ipv4 */
++		iface_setflag(info, flags, invert, XT_IFACE_IPV4_ADDR, "iface-ipv4");
++		return true;
++	case '6': /* --iface-ipv6 */
++		iface_setflag(info, flags, invert, XT_IFACE_IPV6_ADDR, "iface-ipv6");
++		return true;
+ 	}
+ 	return false;
+ }
+@@ -196,6 +206,8 @@
+ 	iface_print_opt(info, XT_IFACE_DYNAMIC,     "--dynamic");
+ 	iface_print_opt(info, XT_IFACE_LOWER_UP,    "--lower_up");
+ 	iface_print_opt(info, XT_IFACE_DORMANT,     "--dormant");
++	iface_print_opt(info, XT_IFACE_IPV4_ADDR,   "--iface-ipv4");
++	iface_print_opt(info, XT_IFACE_IPV6_ADDR,   "--iface-ipv6");
+ 	printf(" ");
+ }
+ 
+--- a/extensions/libxt_iface.man
++++ b/extensions/libxt_iface.man
+@@ -49,3 +49,9 @@
+ .TP
+ [\fB!\fP] \fB\-\-dormant\fP
+ Check the DORMANT flag.
++.TP
++[\fB!\fP] \fB\-\-iface-ipv4\fP
++Check the interface has one or more IPv4 addresses.
++.TP
++[\fB!\fP] \fB\-\-iface-ipv6\fP
++Check the interface has one or more IPv6 addresses.

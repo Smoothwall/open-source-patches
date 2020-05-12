@@ -1,0 +1,14 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Fix build with GCC 4.4 and above
+ Missing header in lexer sources. See Debian bug 526207.
+--- a/jaula/jaula_lexan.ll
++++ b/jaula/jaula_lexan.ll
+@@ -50,6 +50,8 @@
+ #endif
+ }
+ 
++#include <cstdio>
++
+ #ifdef HAVE_SSTREAM
+ #include <sstream>
+ #endif

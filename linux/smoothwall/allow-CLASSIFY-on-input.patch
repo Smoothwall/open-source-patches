@@ -1,0 +1,17 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Permit iptables CLASSIFY target in input chain.
+ IMQ allows the skb->priority value to have an effect on incoming traffic.
+ It can already be set on forwarded traffic early enough to apply to
+ the incoming queue, but proxied traffic will also need to be classified
+ and queued. Permit this target in the input chain too.
+--- a/net/netfilter/xt_CLASSIFY.c
++++ b/net/netfilter/xt_CLASSIFY.c
+@@ -43,7 +43,7 @@
+ 		.revision   = 0,
+ 		.family     = NFPROTO_UNSPEC,
+ 		.hooks      = (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_FORWARD) |
+-		              (1 << NF_INET_POST_ROUTING),
++		              (1 << NF_INET_LOCAL_IN) | (1 << NF_INET_POST_ROUTING),
+ 		.target     = classify_tg,
+ 		.targetsize = sizeof(struct xt_classify_target_info),
+ 		.me         = THIS_MODULE,

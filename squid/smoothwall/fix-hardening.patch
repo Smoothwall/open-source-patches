@@ -1,0 +1,13 @@
+Author: Victor Churchill <victor.churchill@smoothwall.net>
+Description: Replace constant crlf with string literal to avoid errors due to dpkg-buildflags change
+--- a/src/client_side.c
++++ b/src/client_side.c
+@@ -2533,7 +2533,7 @@
+     httpHeaderClean(&hdr);
+ 
+     /* append <crlf> (we packed a header, not a reply) */
+-    memBufPrintf(mb, crlf);
++    memBufPrintf(mb, "\r\n");
+ }
+ 
+ /*

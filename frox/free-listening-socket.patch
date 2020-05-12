@@ -1,0 +1,38 @@
+Two additions:
+
+* use SO_REUSEADDR properly by doing the sockopt before the bind.
+* close the listening fd in the child
+
+--- a/src/main.c
++++ b/src/main.c
+@@ -140,7 +140,6 @@
+ 		exit(1);
+ 	i = 1;
+ 	setsockopt(listen_sockfd, SOL_SOCKET, SO_OOBINLINE, &i, sizeof(i));
+-	setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, &i, sizeof(i));
+ 	setsockopt(listen_sockfd, SOL_SOCKET, SO_LINGER,
+ 		   &linger_opt, sizeof(linger_opt));
+ 
+@@ -241,6 +240,7 @@
+ 		close(fd);
+ 		break;
+ 	case 0:
++		close(listen_sockfd);
+ 		srand(time(NULL) + getpid());
+ 		signal(SIGHUP, SIG_IGN);
+ 		signal(SIGALRM, signal_handle);
+--- a/src/misc.c
++++ b/src/misc.c
+@@ -47,9 +47,12 @@
+ int listen_on_socket(struct sockaddr_in *listen_address, int portrange[2])
+ {
+ 	int sockfd;
++	int on = 1;
+ 
+ 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+ 
++	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
++
+ 	if(!portrange) {
+ 		if(bind(sockfd, (struct sockaddr *) listen_address,
+ 			sizeof(*listen_address))) {

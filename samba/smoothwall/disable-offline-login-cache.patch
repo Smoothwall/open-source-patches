@@ -1,0 +1,21 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Don't store wbinfo tickets in internal cache
+ WBFLAG_PAM_CACHED_LOGIN causes wbinfo to store the ticket in an internal
+ cache for use with ntlm_auth later. This process has been seen to fail
+ on a customer's machine, with the following error:
+ winbindd/winbindd_cred_cache.c:811(store_memory_creds)
+ failed to mlock memory: Cannot allocate memory (12)
+ This seems to correspond to the process reaching the limit of mlock(2)ed
+ memory. We don't need this data to be stored, so disable it.
+Index: samba/nsswitch/wbinfo.c
+===================================================================
+--- samba.orig/nsswitch/wbinfo.c	2016-08-12 10:09:11.545897124 +0100
++++ samba/nsswitch/wbinfo.c	2016-08-12 10:09:11.541897092 +0100
+@@ -2567,7 +2567,6 @@
+ 		}
+ 		case 'K': {
+ 				uint32_t flags = WBFLAG_PAM_KRB5 |
+-						 WBFLAG_PAM_CACHED_LOGIN |
+ 						WBFLAG_PAM_FALLBACK_AFTER_KRB5 |
+ 						 WBFLAG_PAM_INFO3_TEXT |
+ 						 WBFLAG_PAM_CONTACT_TRUSTDOM;

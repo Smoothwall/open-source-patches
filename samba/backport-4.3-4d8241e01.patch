@@ -1,0 +1,319 @@
+From 4d8241e017da534a933e28a0fd26e862ffae8038 Mon Sep 17 00:00:00 2001
+From: Uri Simchoni <urisimchoni@gmail.com>
+Date: Tue, 9 Jun 2015 14:30:14 +0300
+Subject: [PATCH] libads: Fix fallback logic when finding a domain controller
+
+This is a patch to fix bug 11321.
+
+When finding a domain controller, the method is to resolve
+the IP address of candidate servers, and then do an ldap ping until a
+suitable server answers.
+
+In case of failure, there's fallback from DNS lookup to netbios lookup
+(if netbios is enabled) and then back to site-less DNS lookup. The two
+problems here are:
+1. It makes more sense to try site-less DNS before NetBIOS because the
+fallback to NetBIOS is not likely to give better results.
+2. The NetBIOS fallback screws the site-less fallback (I suppose the
+"goto considered harmful fellows are sometimes right after all...).
+
+This fix extracts the core code that does name resolving+ldap ping
+into a separate function and then activates this function in up to
+three modes - site-aware, site-less, and netbios, in that order.
+
+Signed-off-by: Uri Simchoni <urisimchoni@gmail.com>
+Reviewed-by: Jeremy Allison <jra@samba.org>
+Reviewed-by: Alexander Bokovoy <ab@samba.org>
+---
+ source3/libads/ldap.c | 221 ++++++++++++++++++++++++++++----------------------
+ 1 file changed, 126 insertions(+), 95 deletions(-)
+
+Index: samba/source3/libads/ldap.c
+===================================================================
+--- samba.orig/source3/libads/ldap.c	2016-08-09 11:18:33.541481068 +0100
++++ samba/source3/libads/ldap.c	2016-08-09 11:18:33.537481027 +0100
+@@ -313,22 +313,85 @@
+ }
+ 
+ /**********************************************************************
++ resolve a name and perform an "ldap ping"
++**********************************************************************/
++
++static NTSTATUS resolve_and_ping(ADS_STRUCT *ads, const char *sitename,
++				 const char *resolve_target, bool use_dns,
++				 const char *realm)
++{
++	int count, i = 0;
++	struct ip_service *ip_list;
++	NTSTATUS status = NT_STATUS_UNSUCCESSFUL;
++	bool ok = false;
++
++	DEBUG(6, ("resolve_and_ping: (cldap) looking for %s '%s'\n",
++		  (use_dns ? "realm" : "domain"), resolve_target));
++
++	status = get_sorted_dc_list(resolve_target, sitename, &ip_list, &count,
++				    use_dns);
++	if (!NT_STATUS_IS_OK(status)) {
++		return status;
++	}
++
++	/* if we fail this loop, then giveup since all the IP addresses returned
++	 * were dead */
++	for (i = 0; i < count; i++) {
++		char server[INET6_ADDRSTRLEN];
++
++		print_sockaddr(server, sizeof(server), &ip_list[i].ss);
++
++		if (!NT_STATUS_IS_OK(
++			check_negative_conn_cache(resolve_target, server)))
++			continue;
++
++		if (!use_dns) {
++			/* resolve_target in this case is a workgroup name. We
++			   need
++			   to ignore any IP addresses in the negative connection
++			   cache that match ip addresses returned in the ad
++			   realm
++			   case.. */
++			if (realm && *realm &&
++			    !NT_STATUS_IS_OK(
++				check_negative_conn_cache(realm, server))) {
++				/* Ensure we add the workgroup name for this
++				   IP address as negative too. */
++				add_failed_connection_entry(
++				    resolve_target, server,
++				    NT_STATUS_UNSUCCESSFUL);
++				continue;
++			}
++		}
++
++		ok = ads_try_connect(ads, false, &ip_list[i].ss);
++		if (ok) {
++			SAFE_FREE(ip_list);
++			return NT_STATUS_OK;
++		}
++
++		/* keep track of failures */
++		add_failed_connection_entry(resolve_target, server,
++					    NT_STATUS_UNSUCCESSFUL);
++	}
++
++	SAFE_FREE(ip_list);
++
++	return NT_STATUS_NO_LOGON_SERVERS;
++}
++
++/**********************************************************************
+  Try to find an AD dc using our internal name resolution routines
+- Try the realm first and then then workgroup name if netbios is not 
++ Try the realm first and then then workgroup name if netbios is not
+  disabled
+ **********************************************************************/
+ 
+ static NTSTATUS ads_find_dc(ADS_STRUCT *ads)
+ {
+-	const char *c_domain;
++	const char *c_domain = "";
+ 	const char *c_realm;
+-	int count, i=0;
+-	struct ip_service *ip_list;
+-	const char *realm;
+-	const char *domain;
+-	bool got_realm = False;
+ 	bool use_own_domain = False;
+-	char *sitename;
++	char *sitename = NULL;
+ 	NTSTATUS status = NT_STATUS_UNSUCCESSFUL;
+ 	bool ok = false;
+ 
+@@ -337,7 +400,10 @@
+ 	/* realm */
+ 	c_realm = ads->server.realm;
+ 
+-	if ( !c_realm || !*c_realm ) {
++	if (c_realm == NULL)
++		c_realm = "";
++
++	if (!*c_realm) {
+ 		/* special case where no realm and no workgroup means our own */
+ 		if ( !ads->server.workgroup || !*ads->server.workgroup ) {
+ 			use_own_domain = True;
+@@ -345,35 +411,27 @@
+ 		}
+ 	}
+ 
+-	if (c_realm && *c_realm)
+-		got_realm = True;
+-
+-	/* we need to try once with the realm name and fallback to the
+-	   netbios domain name if we fail (if netbios has not been disabled */
++	if (!lp_disable_netbios()) {
++		if (use_own_domain) {
++			c_domain = lp_workgroup();
++		} else {
++			c_domain = ads->server.workgroup;
++			if (!*c_realm && (!c_domain || !*c_domain)) {
++				c_domain = lp_workgroup();
++			}
++		}
+ 
+-	if ( !got_realm	&& !lp_disable_netbios() ) {
+-		c_realm = ads->server.workgroup;
+-		if (!c_realm || !*c_realm) {
+-			if ( use_own_domain )
+-				c_realm = lp_workgroup();
++		if (!c_domain) {
++			c_domain = "";
+ 		}
+ 	}
+ 
+-	if ( !c_realm || !*c_realm ) {
++	if (!*c_realm && !*c_domain) {
+ 		DEBUG(1, ("ads_find_dc: no realm or workgroup!  Don't know "
+ 			  "what to do\n"));
+ 		return NT_STATUS_INVALID_PARAMETER; /* rather need MISSING_PARAMETER ... */
+ 	}
+ 
+-	if ( use_own_domain ) {
+-		c_domain = lp_workgroup();
+-	} else {
+-		c_domain = ads->server.workgroup;
+-	}
+-
+-	realm = c_realm;
+-	domain = c_domain;
+-
+ 	/*
+ 	 * In case of LDAP we use get_dc_name() as that
+ 	 * creates the custom krb5.conf file
+@@ -382,10 +440,11 @@
+ 		fstring srv_name;
+ 		struct sockaddr_storage ip_out;
+ 
+-		DEBUG(6,("ads_find_dc: (ldap) looking for %s '%s'\n",
+-			(got_realm ? "realm" : "domain"), realm));
++		DEBUG(6, ("ads_find_dc: (ldap) looking for realm '%s'"
++			  " and falling back to domain '%s'\n",
++			  c_realm, c_domain));
+ 
+-		ok = get_dc_name(domain, realm, srv_name, &ip_out);
++		ok = get_dc_name(c_domain, c_realm, srv_name, &ip_out);
+ 		if (ok) {
+ 			/*
+ 			 * we call ads_try_connect() to fill in the
+@@ -400,80 +459,52 @@
+ 		return NT_STATUS_NO_LOGON_SERVERS;
+ 	}
+ 
+-	sitename = sitename_fetch(talloc_tos(), realm);
+-
+- again:
+-
+-	DEBUG(6,("ads_find_dc: (cldap) looking for %s '%s'\n",
+-		(got_realm ? "realm" : "domain"), realm));
++	if (*c_realm) {
++		sitename = sitename_fetch(talloc_tos(), c_realm);
++		status = resolve_and_ping(ads, sitename, c_realm, true, c_realm);
+ 
+-	status = get_sorted_dc_list(realm, sitename, &ip_list, &count, got_realm);
+-	if (!NT_STATUS_IS_OK(status)) {
+-		/* fall back to netbios if we can */
+-		if ( got_realm && !lp_disable_netbios() ) {
+-			got_realm = False;
+-			goto again;
++		if (NT_STATUS_IS_OK(status)) {
++			TALLOC_FREE(sitename);
++			return status;
+ 		}
+ 
+-		TALLOC_FREE(sitename);
+-		return status;
+-	}
+-
+-	/* if we fail this loop, then giveup since all the IP addresses returned were dead */
+-	for ( i=0; i<count; i++ ) {
+-		char server[INET6_ADDRSTRLEN];
+-
+-		print_sockaddr(server, sizeof(server), &ip_list[i].ss);
+-
+-		if ( !NT_STATUS_IS_OK(check_negative_conn_cache(realm, server)) )
+-			continue;
+-
+-		if (!got_realm) {
+-			/* realm in this case is a workgroup name. We need
+-			   to ignore any IP addresses in the negative connection
+-			   cache that match ip addresses returned in the ad realm
+-			   case. It sucks that I have to reproduce the logic above... */
+-			c_realm = ads->server.realm;
+-			if ( !c_realm || !*c_realm ) {
+-				if ( !ads->server.workgroup || !*ads->server.workgroup ) {
+-					c_realm = lp_realm();
+-				}
+-			}
+-			if (c_realm && *c_realm &&
+-					!NT_STATUS_IS_OK(check_negative_conn_cache(c_realm, server))) {
+-				/* Ensure we add the workgroup name for this
+-				   IP address as negative too. */
+-				add_failed_connection_entry( realm, server, NT_STATUS_UNSUCCESSFUL );
+-				continue;
++		/* In case we failed to contact one of our closest DC on our
++		 * site we
++		 * need to try to find another DC, retry with a site-less SRV
++		 * DNS query
++		 * - Guenther */
++
++		if (sitename) {
++			DEBUG(1, ("ads_find_dc: failed to find a valid DC on "
++				  "our site (%s), "
++				  "trying to find another DC\n",
++				  sitename));
++			namecache_delete(c_realm, 0x1C);
++			status =
++			    resolve_and_ping(ads, NULL, c_realm, true, c_realm);
++
++			if (NT_STATUS_IS_OK(status)) {
++				TALLOC_FREE(sitename);
++				return status;
+ 			}
+ 		}
+ 
+-		ok = ads_try_connect(ads, false, &ip_list[i].ss);
+-		if (ok) {
+-			SAFE_FREE(ip_list);
+-			TALLOC_FREE(sitename);
+-			return NT_STATUS_OK;
+-		}
+-
+-		/* keep track of failures */
+-		add_failed_connection_entry( realm, server, NT_STATUS_UNSUCCESSFUL );
++		TALLOC_FREE(sitename);
+ 	}
+ 
+-	SAFE_FREE(ip_list);
++	/* try netbios as fallback - if permitted,
++	   or if configuration specifically requests it */
++	if (*c_domain) {
++		if (*c_realm) {
++			DEBUG(1, ("ads_find_dc: falling back to netbios "
++				  "name resolution for domain %s\n",
++				  c_domain));
++		}
+ 
+-	/* In case we failed to contact one of our closest DC on our site we
+-	 * need to try to find another DC, retry with a site-less SRV DNS query
+-	 * - Guenther */
+-
+-	if (sitename) {
+-		DEBUG(1,("ads_find_dc: failed to find a valid DC on our site (%s), "
+-				"trying to find another DC\n", sitename));
+-		TALLOC_FREE(sitename);
+-		namecache_delete(realm, 0x1C);
+-		goto again;
++		status = resolve_and_ping(ads, NULL, c_domain, false, c_realm);
+ 	}
+ 
+-	return NT_STATUS_NO_LOGON_SERVERS;
++	return status;
+ }
+ 
+ /**

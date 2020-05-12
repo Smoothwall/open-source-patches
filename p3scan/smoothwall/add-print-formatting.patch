@@ -1,0 +1,35 @@
+Author: Artur Fratczak <artur.fratczak@smoothwall.com>
+Description: Add missing string formatting.
+--- a/ripmime-1.4.0.5/ripOLE/logger.c
++++ b/ripmime-1.4.0.5/ripOLE/logger.c
+@@ -320,7 +320,7 @@
+ 			fprintf(stderr,"%s%s",output, lineend );
+ 			break;
+ 		case _LOGGER_SYSLOG:
+-			syslog(_LOGGER_syslog_mode,output);
++			syslog(_LOGGER_syslog_mode, "%s", output);
+ 			break;
+ 		case _LOGGER_STDOUT:
+ 			fprintf(stdout,"%s%s",output, lineend);
+--- a/ripmime-1.4.0.5/tnef/logger.c
++++ b/ripmime-1.4.0.5/tnef/logger.c
+@@ -320,7 +320,7 @@
+ 			fprintf(stderr,"%s%s",output, lineend );
+ 			break;
+ 		case _LOGGER_SYSLOG:
+-			syslog(_LOGGER_syslog_mode,output);
++			syslog(_LOGGER_syslog_mode, "%s",output);
+ 			break;
+ 		case _LOGGER_STDOUT:
+ 			fprintf(stdout,"%s%s",output, lineend);
+--- a/ripmime-1.4.0.5/logger.c
++++ b/ripmime-1.4.0.5/logger.c
+@@ -320,7 +320,7 @@
+ 			fprintf(stderr,"%s%s",output, lineend );
+ 			break;
+ 		case _LOGGER_SYSLOG:
+-			syslog(_LOGGER_syslog_mode,output);
++			syslog(_LOGGER_syslog_mode, "%s", output);
+ 			break;
+ 		case _LOGGER_STDOUT:
+ 			fprintf(stdout,"%s%s",output, lineend);

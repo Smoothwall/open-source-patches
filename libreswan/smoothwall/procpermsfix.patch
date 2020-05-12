@@ -1,0 +1,30 @@
+Author: Vytas Dauksa <vytas.dauksa@smoothwall.net>
+Description: Reimplemantation of openswan-2.6.32-procpermsfix.diff patch.
+ This is needed so that UI would correctly show VPN status. This was originally
+ written by Lawrence in 67ba4c323359dd6a09bc95e4fc8db26c55207523 commit. Rewrite
+ was needed to accomodate changes in linux/net/ipsec/ipsec_proc with
+ openswan-procfs-fix-for-kernel3.10.patch.
+--- a/linux/net/ipsec/ipsec_proc.c
++++ b/linux/net/ipsec/ipsec_proc.c
+@@ -598,17 +598,17 @@
+     NODE("klipsdebug",     &proc_net_ipsec_dir, ipsec_klipsdebug_show,     0),
+ 
+     DIRE("eroute",         &proc_net_ipsec_dir, &proc_eroute_dir),
+-    NODE("all",            &proc_eroute_dir,    ipsec_eroute_show,         0),
++    NODE("all",            &proc_eroute_dir,    ipsec_eroute_show,         0444),
+ 
+     DIRE("spi",            &proc_net_ipsec_dir, &proc_spi_dir),
+-    NODE("all",            &proc_spi_dir,       ipsec_spi_show,            0),
++    NODE("all",            &proc_spi_dir,       ipsec_spi_show,            0444),
+ 
+     DIRE("spigrp",         &proc_net_ipsec_dir, &proc_spigrp_dir),
+-    NODE("all",            &proc_spigrp_dir,    ipsec_spigrp_show,         0),
++    NODE("all",            &proc_spigrp_dir,    ipsec_spigrp_show,         0444),
+ 
+ #ifdef IPSEC_SA_RECOUNT_DEBUG
+     DIRE("saraw",          &proc_net_ipsec_dir, &proc_saraw_dir),
+-    NODE("all",            &proc_saraw_dir,     ipsec_saraw_show,          0),
++    NODE("all",            &proc_saraw_dir,     ipsec_saraw_show,          0444),
+ #endif
+ 
+     NODE("tncfg",          &proc_net_ipsec_dir, ipsec_tncfg_show,          0),

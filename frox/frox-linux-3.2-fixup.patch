@@ -1,0 +1,18 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Since the move from linux 2.6 to 3.2 the headers seemed
+to have moved around enough to confuse the configure tests included
+with frox.  Pull in the required headers to allow building against
+netfilter libs.
+--- a/configure
++++ b/configure
+@@ -4012,6 +4012,10 @@
+ cat >>conftest.$ac_ext <<_ACEOF
+ /* end confdefs.h.  */
+ #include <limits.h>
++#include <unistd.h>
++
++#include <linux/in.h>
++#include <linux/in6.h>
+ 
+ #include <$ac_header>
+ _ACEOF

@@ -1,0 +1,16 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Disable bad test part.
+	When building this under 64bit the test fails to compile,
+	so remove the offending line as it's just a printf
+--- a/test/Ethernet/get_address.c
++++ b/test/Ethernet/get_address.c
+@@ -82,7 +82,8 @@
+         printf("MAC address: ");
+         for (c = 0; c < 6; c++)
+         {
+-            printf("%x", e->ether_addr_octet[c]);
++			// Disable this printf -> it doesn't compile nice on 64bit
++            //printf("%x", e->ether_addr_octet[c]);
+             if (c != 5)
+             {
+                 printf(":");

@@ -1,0 +1,185 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Have gearmand bind to a random available port when running tests.
+ There is the possibility of some race issues between the close and fork, but
+ it should get us around the main problem where multiple instances of the tests
+ running cause the tests to go all wonky.
+--- a/t/04-live.t
++++ b/t/04-live.t
+@@ -32,24 +32,24 @@
+ my $data      = 0;
+ my $tasks     = 0;
+ 
++my $testlib = new TestLib;
++my $gearman_port = $testlib->run_gearmand();
++$testlib->run_test_worker($gearman_port);
++sleep(2);
++
+ # client
+ my $client= new Gearman::XS::Client;
+ isa_ok($client, 'Gearman::XS::Client');
+ 
+ is($client->error(), undef);
+-is($client->add_server('127.0.0.1', 4731), GEARMAN_SUCCESS);
++is($client->add_server('127.0.0.1', $gearman_port), GEARMAN_SUCCESS);
+ 
+ # worker
+ my $worker= new Gearman::XS::Worker;
+ isa_ok($worker, 'Gearman::XS::Worker');
+ 
+ is($worker->error(), undef);
+-is($worker->add_server('127.0.0.1', 4731), GEARMAN_SUCCESS);
+-
+-my $testlib = new TestLib;
+-$testlib->run_gearmand();
+-$testlib->run_test_worker();
+-sleep(2);
++is($worker->add_server('127.0.0.1', $gearman_port), GEARMAN_SUCCESS);
+ 
+ # gearman server running?
+ is($client->echo("blubbtest"), GEARMAN_SUCCESS);
+@@ -208,7 +208,7 @@
+ is($result, undef);
+ 
+ $client= new Gearman::XS::Client;
+-$client->add_server('127.0.0.1', 4731);
++$client->add_server('127.0.0.1', $gearman_port);
+ 
+ # You can turn off auto task destruction by unsetting this flag on a gearman client.
+ $client->remove_options(GEARMAN_CLIENT_FREE_TASKS);
+@@ -237,7 +237,7 @@
+ $client->set_timeout(-1); # infinite
+ 
+ $client= new Gearman::XS::Client;
+-$client->add_server('127.0.0.1', 4731);
++$client->add_server('127.0.0.1', $gearman_port);
+ $client->add_options(GEARMAN_CLIENT_NON_BLOCKING);
+ 
+ $tasks= 2;
+--- a/t/lib/TestLib.pm
++++ b/t/lib/TestLib.pm
+@@ -13,6 +13,7 @@
+ use strict;
+ use warnings;
+ use FindBin qw( $Bin );
++use IO::Socket::INET;
+ 
+ sub new { return bless {}, shift }
+ 
+@@ -22,22 +23,26 @@
+   my $gearmand = find_gearmand();
+   die "Cannot locate gearmand executable"
+     if !$gearmand;
++  my $socket = IO::Socket::INET->new(Listen => 5);
++  my $port = $socket->sockport;
++  $socket->close();
+   if ($self->{gearmand_pid}= fork)  {
+-    warn("test_server PID is " . $self->{gearmand_pid});
++    warn("test_server PID is " . $self->{gearmand_pid} . " on port " . $port);
+   }
+   else {
+     die "cannot fork: $!"
+       if (!defined $self->{gearmand_pid});
+     $|++;
+-    my @cmd= ($gearmand, '-p', 4731, '--log-file=/tmp/gearmand-xs.log', '--verbose=DEBUG', '--pid-file=/tmp/gearmand-xs.pid');
++    my @cmd= ($gearmand, '-p', $port, '--log-file=/tmp/gearmand-xs.log', '--verbose=DEBUG', '--pid-file=/tmp/gearmand-xs.pid');
+     exec(@cmd)
+       or die("Could not exec $gearmand");
+     exit;
+   }
++  return $port;
+ }
+ 
+ sub run_test_worker {
+-  my ($self) = @_;
++  my ($self, $port) = @_;
+   if ($self->{test_worker_pid} = fork)
+   {
+     warn("test_worker PID is " . $self->{test_worker_pid});
+@@ -47,7 +52,7 @@
+     die "cannot fork: $!"
+       if (!defined $self->{test_worker_pid});
+     $|++;
+-    my @cmd = ($^X, "$Bin/test_worker.pl");
++    my @cmd = ($^X, "$Bin/test_worker.pl", $port);
+     exec(@cmd)
+       or die("Could not exec $Bin/test_worker.pl");
+     exit;
+--- a/t/05-live-worker.t
++++ b/t/05-live-worker.t
+@@ -27,19 +27,19 @@
+ 
+ my $timeout = 0;
+ 
++my $testlib = new TestLib;
++my $gearman_port = $testlib->run_gearmand();
++sleep(2);
++
+ # client
+ my $client= new Gearman::XS::Client;
+ isa_ok($client, 'Gearman::XS::Client');
+-is($client->add_server('127.0.0.1', 4731), GEARMAN_SUCCESS);
++is($client->add_server('127.0.0.1', $gearman_port), GEARMAN_SUCCESS);
+ 
+ # worker
+ my $worker= new Gearman::XS::Worker;
+ isa_ok($worker, 'Gearman::XS::Worker');
+-is($worker->add_server('127.0.0.1', 4731), GEARMAN_SUCCESS);
+-
+-my $testlib = new TestLib;
+-$testlib->run_gearmand();
+-sleep(2);
++is($worker->add_server('127.0.0.1', $gearman_port), GEARMAN_SUCCESS);
+ 
+ # gearman server running?
+ is($client->echo("blubbtest"), GEARMAN_SUCCESS);
+@@ -56,7 +56,7 @@
+ is($worker->unregister_all(), GEARMAN_NO_REGISTERED_FUNCTIONS);
+ 
+ # gearman_worker_unregister_all() also remove the server from the list?
+-is($worker->add_server('127.0.0.1', 4731), GEARMAN_SUCCESS);
++is($worker->add_server('127.0.0.1', $gearman_port), GEARMAN_SUCCESS);
+ $worker->add_options(GEARMAN_WORKER_GRAB_UNIQ);
+ 
+ # high-level function registration
+--- a/t/06_live-worker-timeout.t
++++ b/t/06_live-worker-timeout.t
+@@ -27,22 +27,22 @@
+ 
+ my $timeout = 0;
+ 
++my $testlib = new TestLib;
++my $gearman_port = $testlib->run_gearmand();
++sleep(2);
++
+ # client
+ my $client= new Gearman::XS::Client;
+ isa_ok($client, 'Gearman::XS::Client');
+-is($client->add_server('localhost', 4731), GEARMAN_SUCCESS);
++is($client->add_server('localhost', $gearman_port), GEARMAN_SUCCESS);
+ 
+ # worker
+ my $worker= new Gearman::XS::Worker;
+ isa_ok($worker, 'Gearman::XS::Worker');
+-is($worker->add_server('localhost', 4731), GEARMAN_SUCCESS);
++is($worker->add_server('localhost', $gearman_port), GEARMAN_SUCCESS);
+ is($worker->add_function("dummy", 0, sub {}, ''), GEARMAN_SUCCESS);
+ $worker->set_log_fn(\&log_callback, GEARMAN_VERBOSE_ERROR);
+ 
+-my $testlib = new TestLib;
+-$testlib->run_gearmand();
+-sleep(2);
+-
+ $worker->set_timeout(1000); # 1 second
+ $ret = $worker->work();
+ is($ret, GEARMAN_TIMEOUT);
+--- a/t/test_worker.pl
++++ b/t/test_worker.pl
+@@ -18,7 +18,7 @@
+ use Gearman::XS::Worker;
+ 
+ my $worker = new Gearman::XS::Worker;
+-$worker->add_server('127.0.0.1', 4731);
++$worker->add_server('127.0.0.1', $ARGV[0]);
+ 
+ $worker->add_function("reverse", 0, \&reverse, '');
+ $worker->add_function("fail", 0, \&fail, '');

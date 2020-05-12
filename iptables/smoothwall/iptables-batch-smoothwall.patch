@@ -1,0 +1,31 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Add Smoothwallisms to iptables-batch
+ The previous ipbatch had some small Smoothwall-specific modifications;
+ add them as a separate patch so that the OpenSUSE one can be used (and
+ updated) as-is.
+
+--- a/iptables/iptables-batch.c
++++ b/iptables/iptables-batch.c
+@@ -149,6 +149,12 @@
+ 	int ret = 0;
+ 	char* word;
+ 
++	// Flatten out absolute binary paths
++	if (strncmp(ptr, "/usr/sbin/", 10) == 0)
++		ptr += 10;
++	if (strncmp(ptr, "/sbin/", 6) == 0)
++		ptr += 6;
++
+ 	while(ptr && *ptr)
+ 	{
+ 		if(*ptr == '#')
+@@ -408,6 +414,9 @@
+ 	{
+ 		if(llen < 1 || !*iline)
+ 			continue;
++		// Ignore obsolete token
++		if (strncmp(iline, "end", 3) == 0)
++			break;
+ 		if(iline[strlen(iline)-1] == '\n')
+ 			iline[strlen(iline) -1 ] = '\0';
+ 

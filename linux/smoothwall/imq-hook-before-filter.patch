@@ -1,0 +1,159 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Allow IMQ to hook between mangle and filter.
+ Incoming traffic will be queued using IMQ. Normally it hooks in
+ prerouting, either before or after NAT processing, but either is too
+ early; the bandwidth assigned can depend on the result of layer 7
+ analysis, which must be performed in the input or forward mangle table
+ in order to see traffic without NAT.
+ .
+ Add an additional option for the IMQ hook, just after the mangle
+ table in both input and forward, and select this option in the kernel
+ configuration.
+--- a/drivers/net/Kconfig
++++ b/drivers/net/Kconfig
+@@ -231,6 +231,8 @@
+ 	  #2  After NAT    |      Before NAT
+ 	  #3  Before NAT   |      After NAT
+ 	  #4  Before NAT   |      Before NAT
++	  #5  Before filter|      After NAT
++	  #6  Before filter|      Before NAT
+ 
+ 	  The default behavior is to hook before NAT on PREROUTING
+ 	  and after NAT on POSTROUTING (#3).
+@@ -302,6 +304,36 @@
+ 
+ 	  If not sure leave the default settings alone.
+ 
++config IMQ_BEHAVIOR_CA
++	bool "IMQ CA"
++	help
++	  This setting defines how IMQ behaves in respect to its
++	  hooking in PREROUTING and POSTROUTING.
++
++	  Choosing this option will make IMQ hook like this:
++
++	  PREROUTING:   Before filter
++	  POSTROUTING:  After NAT
++
++	  More information can be found at: www.linuximq.net
++
++	  If not sure leave the default settings alone.
++
++config IMQ_BEHAVIOR_CB
++	bool "IMQ CB"
++	help
++	  This setting defines how IMQ behaves in respect to its
++	  hooking in PREROUTING and POSTROUTING.
++
++	  Choosing this option will make IMQ hook like this:
++
++	  PREROUTING:   Before filter
++	  POSTROUTING:  Before NAT
++
++	  More information can be found at: www.linuximq.net
++
++ 	  If not sure leave the default settings alone.
++
+ endchoice
+ 
+ config IMQ_NUM_DEVS
+--- a/drivers/net/imq.c
++++ b/drivers/net/imq.c
+@@ -44,6 +44,24 @@
+ static nf_hookfn imq_nf_hook;
+ 
+ static struct nf_hook_ops imq_ops[] = {
++#if defined(CONFIG_IMQ_BEHAVIOR_CA) || defined(CONFIG_IMQ_BEHAVIOR_CB)
++	{
++	/* imq_ingress_ipv4 */
++		.hook		= imq_nf_hook,
++		.owner		= THIS_MODULE,
++		.pf		= PF_INET,
++		.hooknum	= NF_INET_LOCAL_IN,
++		.priority	= NF_IP_PRI_FILTER - 1,
++	},
++	{
++	/* imq_ingress_ipv4 */
++		.hook		= imq_nf_hook,
++		.owner		= THIS_MODULE,
++		.pf		= PF_INET,
++		.hooknum	= NF_INET_FORWARD,
++		.priority	= NF_IP_PRI_FILTER - 1,
++	},
++#else
+ 	{
+ 	/* imq_ingress_ipv4 */
+ 		.hook		= imq_nf_hook,
+@@ -56,19 +74,38 @@
+ 		.priority	= NF_IP_PRI_NAT_DST + 1,
+ #endif
+ 	},
++#endif /* defined(CONFIG_IMQ_BEHAVIOR_CA) || defined(CONFIG_IMQ_BEHAVIOR_CB) */
+ 	{
+ 	/* imq_egress_ipv4 */
+ 		.hook		= imq_nf_hook,
+ 		.owner		= THIS_MODULE,
+ 		.pf		= PF_INET,
+ 		.hooknum	= NF_INET_POST_ROUTING,
+-#if defined(CONFIG_IMQ_BEHAVIOR_AA) || defined(CONFIG_IMQ_BEHAVIOR_BA)
++#if defined(CONFIG_IMQ_BEHAVIOR_AA) || defined(CONFIG_IMQ_BEHAVIOR_BA) || defined(CONFIG_IMQ_BEHAVIOR_CA)
+ 		.priority	= NF_IP_PRI_LAST,
+ #else
+ 		.priority	= NF_IP_PRI_NAT_SRC - 1,
+ #endif
+ 	},
+ #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
++#if defined(CONFIG_IMQ_BEHAVIOR_CA) || defined(CONFIG_IMQ_BEHAVIOR_CB)
++	{
++	/* imq_ingress_ipv6 */
++		.hook		= imq_nf_hook,
++		.owner		= THIS_MODULE,
++		.pf		= PF_INET6,
++		.hooknum	= NF_INET_LOCAL_IN,
++		.priority	= NF_IP6_PRI_FILTER - 1,
++	},
++	{
++	/* imq_ingress_ipv6 */
++		.hook		= imq_nf_hook,
++		.owner		= THIS_MODULE,
++		.pf		= PF_INET6,
++		.hooknum	= NF_INET_FORWARD,
++		.priority	= NF_IP6_PRI_FILTER - 1,
++	},
++#else
+ 	{
+ 	/* imq_ingress_ipv6 */
+ 		.hook		= imq_nf_hook,
+@@ -81,13 +118,14 @@
+ 		.priority	= NF_IP6_PRI_NAT_DST + 1,
+ #endif
+ 	},
++#endif /* defined(CONFIG_IMQ_BEHAVIOR_CA) || defined(CONFIG_IMQ_BEHAVIOR_CB) */
+ 	{
+ 	/* imq_egress_ipv6 */
+ 		.hook		= imq_nf_hook,
+ 		.owner		= THIS_MODULE,
+ 		.pf		= PF_INET6,
+ 		.hooknum	= NF_INET_POST_ROUTING,
+-#if defined(CONFIG_IMQ_BEHAVIOR_AA) || defined(CONFIG_IMQ_BEHAVIOR_BA)
++#if defined(CONFIG_IMQ_BEHAVIOR_AA) || defined(CONFIG_IMQ_BEHAVIOR_BA) || defined(CONFIG_IMQ_BEHAVIOR_CA)
+ 		.priority	= NF_IP6_PRI_LAST,
+ #else
+ 		.priority	= NF_IP6_PRI_NAT_SRC - 1,
+@@ -847,12 +885,14 @@
+ 	pr_info("IMQ driver loaded successfully. (numdevs = %d, numqueues = %d)\n",
+ 		numdevs, numqueues);
+ 
+-#if defined(CONFIG_IMQ_BEHAVIOR_BA) || defined(CONFIG_IMQ_BEHAVIOR_BB)
++#if defined(CONFIG_IMQ_BEHAVIOR_CA) || defined(CONFIG_IMQ_BEHAVIOR_CB)
++	pr_info("\tHooking IMQ before filter on INPUT/FORWARD.\n");
++#elif defined(CONFIG_IMQ_BEHAVIOR_BA) || defined(CONFIG_IMQ_BEHAVIOR_BB)
+ 	pr_info("\tHooking IMQ before NAT on PREROUTING.\n");
+ #else
+ 	pr_info("\tHooking IMQ after NAT on PREROUTING.\n");
+ #endif
+-#if defined(CONFIG_IMQ_BEHAVIOR_AB) || defined(CONFIG_IMQ_BEHAVIOR_BB)
++#if defined(CONFIG_IMQ_BEHAVIOR_AB) || defined(CONFIG_IMQ_BEHAVIOR_BB) || defined(CONFIG_IMQ_BEHAVIOR_CB)
+ 	pr_info("\tHooking IMQ before NAT on POSTROUTING.\n");
+ #else
+ 	pr_info("\tHooking IMQ after NAT on POSTROUTING.\n");

@@ -1,0 +1,15 @@
+Description: Add Diffie-Hellman group modp1024(2) back into IKE defaults
+ In Libreswan 3.19 they removed dh group 2 from the IKE defaults, this means for us
+ that post-upgrade, existing tunnels talking to remote ends accepting only DH 2 will
+ break. This patch re-introduces group 2 as a default for IKEv1 tunnels.
+Author: Jonathan Barron <jonathan.barron@smoothwall.net>
+--- a/programs/pluto/ike_info.c
++++ b/programs/pluto/ike_info.c
+@@ -246,6 +246,7 @@
+ static const struct ike_alg *default_ikev1_groups[] = {
+ 	&oakley_group_modp2048.common,
+ 	&oakley_group_modp1536.common,
++	&oakley_group_modp1024.common,
+ 	NULL,
+ };
+ static const struct ike_alg *default_ikev2_groups[] = {

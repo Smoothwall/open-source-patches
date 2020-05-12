@@ -1,0 +1,68 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Parse the IFLA_PROTINFO.IFLA_INET6_FLAGS field in IfinfoMsg.
+--- a/lib/IO/Socket/Netlink/Route.pm
++++ b/lib/IO/Socket/Netlink/Route.pm
+@@ -222,6 +222,7 @@
+    operstate => [ IFLA_OPERSTATE, "u8" ],
+    linkmode  => [ IFLA_LINKMODE,  "u8" ],
+    linkinfo  => [ IFLA_LINKINFO,  "linkinfo" ],
++   protinfo  => [ IFLA_PROTINFO,  "protinfo" ],
+ );
+ 
+ BEGIN {
+@@ -238,6 +239,22 @@
+ sub   pack_nlattr_linkinfo { die }
+ sub unpack_nlattr_linkinfo { "LINKINFO" }
+ 
++sub   pack_nlattr_protinfo { die }
++sub unpack_nlattr_protinfo
++{
++	my ($self, $protinfo) = @_;
++	
++	my %in  = Socket::Netlink::unpack_nlattrs($protinfo);
++	my %out = ();
++	
++	if(defined($in{&IFLA_INET6_FLAGS}))
++	{
++		$out{inet6_flags} = $self->unpack_nlattr_u32($in{&IFLA_INET6_FLAGS});
++	}
++	
++	return \%out;
++}
++
+ package IO::Socket::Netlink::Route::_IfaddrMsg;
+ 
+ use base qw( IO::Socket::Netlink::Route::_Message );
+--- a/lib/Socket/Netlink/Route.pm
++++ b/lib/Socket/Netlink/Route.pm
+@@ -14,6 +14,17 @@
+ 
+ use Socket::Netlink::Route_const;
+ 
++push(our @EXPORT, qw(IF_RS_SENT IF_RA_RCVD IF_RA_MANAGED IF_RA_OTHERCONF));
++
++# IFLA_INET6_FLAGS values. Missing from the "public" Linux headers.
++#
++use constant {
++	IF_RS_SENT      => 0x10,
++	IF_RA_RCVD      => 0x20,
++	IF_RA_MANAGED   => 0x40,
++	IF_RA_OTHERCONF => 0x80,
++};
++
+ =head1 NAME
+ 
+ C<Socket::Netlink::Route> - interface to Linux's C<NETLINK_ROUTE> netlink
+--- a/lib/Socket/Netlink/Route_const.pm.PL
++++ b/lib/Socket/Netlink/Route_const.pm.PL
+@@ -54,6 +54,10 @@
+ # Later addition
+ constant "IFLA_$_", ifdef => "IFLA_$_" for qw( IFALIAS );
+ 
++# IFLA_PROTINFO attributes
++#
++constant "IFLA_$_" for qw( INET6_FLAGS );
++
+ if( $HAVE_IF_LINK ) {
+    structure "struct rtnl_link_stats",
+       arg_style => "hashref",

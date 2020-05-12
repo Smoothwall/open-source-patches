@@ -1,0 +1,15 @@
+Description: Fixes issue where status line matching is never performed.
+!$headers will never be true because of the way it is defined, really we want
+to make sure that we haven't parsed anything yet. Based on patch supplied in
+the bug on CPAN: https://rt.cpan.org/Public/Bug/Display.html?id=82125
+--- a/lib/Net/Server/HTTP.pm
++++ b/lib/Net/Server/HTTP.pm
+@@ -136,7 +136,7 @@
+         while ($headers->{'unparsed'} =~ s/^(.*?)\015?\012//) {
+             my $line = $1;
+ 
+-            if (!$headers && $line =~ m{^HTTP/(1.[01]) \s+ (\d+) (?: | \s+ .+)$ }x) {
++            if (!$headers->{'parsed'} && $line =~ m{^HTTP/(1.[01]) \s+ (\d+) (?: | \s+ .+)$ }x) {
+                 $headers->{'status'} = [];
+                 $headers->{'parsed'} .= "$line\015\012";
+                 $prop->{'request_info'}->{'http_version'} = $1;

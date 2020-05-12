@@ -1,0 +1,20 @@
+--- a/lib/Curses/UI.pm
++++ b/lib/Curses/UI.pm
+@@ -12,6 +12,7 @@
+ use Curses::UI::Color;
+ use FileHandle;
+ use Term::ReadKey;
++use Carp;
+ 
+ =head1 NAME
+ 
+@@ -813,7 +814,8 @@
+ 
+     $exit = 1 unless defined $exit;
+     chomp $error;
+-    $error .= "\n";
++    
++    confess($error);
+ 
+     my $s = $self->{-canvasscr};
+     $s->clear;

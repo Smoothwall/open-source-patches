@@ -1,0 +1,45 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description:  Prevent HFSC class from bursting over its limit.
+ This disabled code prevented an idle class from saving up its
+ allocated bandwidth and using it in the future. Without it, a
+ child class is constrained by its limit but is able to exceed
+ its parent class's limit. This breaks the line speed limit
+ which is required for the shaping to be effective.
+ .
+ Restore the old behaviour, which apparently caused problems
+ when shaping at multi-gigabit speeds. If any problems occur,
+ more research will be required.
+--- a/net/sched/sch_hfsc.c
++++ b/net/sched/sch_hfsc.c
+@@ -764,7 +764,7 @@
+ static void
+ update_vf(struct hfsc_class *cl, unsigned int len, u64 cur_time)
+ {
+-	u64 f; /* , myf_bound, delta; */
++	u64 f, myf_bound, delta;
+ 	int go_passive = 0;
+ 
+ 	if (cl->qdisc->q.qlen == 0 && cl->cl_flags & HFSC_FSC)
+@@ -819,7 +819,6 @@
+ 		if (cl->cl_flags & HFSC_USC) {
+ 			cl->cl_myf = cl->cl_myfadj + rtsc_y2x(&cl->cl_ulimit,
+ 							      cl->cl_total);
+-#if 0
+ 			/*
+ 			 * This code causes classes to stay way under their
+ 			 * limit when multiple classes are used at gigabit
+@@ -832,13 +831,12 @@
+ 			 * in a steady state under rate-limiting, myf
+ 			 * fluctuates within one clock tick.
+ 			 */
+-			myf_bound = cur_time - PSCHED_JIFFIE2US(1);
++			myf_bound = cur_time - (PSCHED_TICKS_PER_SEC/HZ);
+ 			if (cl->cl_myf < myf_bound) {
+ 				delta = cur_time - cl->cl_myf;
+ 				cl->cl_myfadj += delta;
+ 				cl->cl_myf += delta;
+ 			}
+-#endif
+ 		}
+ 
+ 		f = max(cl->cl_myf, cl->cl_cfmin);

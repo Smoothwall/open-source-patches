@@ -1,0 +1,16 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Fix build against 3.16 kernel
+ Set netdev->ethtool_ops directly rather than use SET_ETHTOOL_OPS, so that this
+ builds against our 3.16 kernel
+===================================================================
+--- bp_ctl-5.1.5.orig/bp_mod.c
++++ bp_ctl-5.1.5/bp_mod.c
+@@ -5936,7 +5936,7 @@ static inline struct device *pci_dev_to_
+ 
+ void bpvm_set_ethtool_ops(struct net_device *netdev)
+ {
+-    SET_ETHTOOL_OPS(netdev, &bpvm_ethtool_ops);
++    netdev->ethtool_ops = &bpvm_ethtool_ops;
+ }  
+ 
+ int bpvm_probe(void)

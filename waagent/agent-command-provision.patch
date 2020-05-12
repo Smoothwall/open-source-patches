@@ -1,0 +1,32 @@
+From 9bb4b729550fd5dff419ca35a1a82cf00f41a63f Mon Sep 17 00:00:00 2001
+From: Bastian Blank <bastian.blank@credativ.de>
+Date: Wed, 4 Jan 2017 18:05:59 +0100
+Subject: Add provision command to agent
+
+Patch-Name: agent-command-provision.patch
+---
+ azurelinuxagent/agent.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/azurelinuxagent/agent.py b/azurelinuxagent/agent.py
+index 2c21e47..b9a3b1a 100644
+--- a/azurelinuxagent/agent.py
++++ b/azurelinuxagent/agent.py
+@@ -148,6 +148,8 @@ def parse_args(sys_args):
+             cmd = "deprovision+user"
+         elif re.match("^([-/]*)deprovision", a):
+             cmd = "deprovision"
++        elif re.match("^([-/]*)provision", a):
++            cmd = "provision"
+         elif re.match("^([-/]*)daemon", a):
+             cmd = "daemon"
+         elif re.match("^([-/]*)start", a):
+@@ -187,7 +189,7 @@ def usage():
+     """
+     print("")
+     print((("usage: {0} [-verbose] [-force] [-help] "
+-           "-deprovision[+user]|-register-service|-version|-daemon|-start|"
++           "-provision|-deprovision[+user]|-register-service|-version|-daemon|-start|"
+            "-run-exthandlers]"
+            "").format(sys.argv[0])))
+     print("")

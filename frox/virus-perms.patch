@@ -1,0 +1,22 @@
+--- frox-0.7.18/src/misc.c	2005-02-04 10:24:55.000000000 +0000
++++ frox-0.7.18.new/src/misc.c	2010-06-07 15:59:38.000000000 +0000
+@@ -388,7 +388,7 @@
+ 	sstr_apprintf(name, "%s/tmp", config.chroot);
+ 
+ 	if(stat(sstr_buf(name), &tmp) == -1) {
+-		if(mkdir(sstr_buf(name), S_IRWXU) == -1) {
++		if(mkdir(sstr_buf(name), 0775) == -1) {
+ 			write_log(ERROR, "Unable to make tmp dir %s",
+ 				  sstr_buf(name));
+ 			sstr_free(name);
+--- frox-0.7.18/src/vscan.c	2005-02-04 10:24:55.000000000 +0000
++++ frox-0.7.18.new/src/vscan.c	2010-06-07 16:00:25.000000000 +0000
+@@ -100,7 +100,7 @@
+ {
+ 	if(!config.vscanner)
+ 		return;
+-	fd = creat(scanfile, S_IRUSR | S_IWUSR);
++	fd = creat(scanfile, 0664);
+ 	status = INCOMING;
+ 	expected_reply = STARTING;
+ 	time(&lastprog);

@@ -1,0 +1,168 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Use a unix domain socket between G3 and Squid
+ Rather than assuming TCP for communication between Squid and G3 which are
+ on the same machine, instead use a unix domain socket.  This should reduce
+ some communication overhead on the system.
+--- a/src/comm.cc
++++ b/src/comm.cc
+@@ -516,6 +516,27 @@
+ {
+     int new_socket;
+     struct addrinfo *AI = NULL;
++    struct sockaddr_un un;
++    char ipbuf[MAX_IPSTRLEN];
++    char *ip_addr;
++    int ud_flags;
++
++    ip_addr = addr.ToURL(ipbuf, MAX_IPSTRLEN);
++
++    if (strcmp(IP_PORT_FOR_UD, ip_addr) == 0) {
++        debugs(5, 3, "comm_openex: Converting 127.0.0.1:802 to use UD Socket.");
++
++        memset(&un, 0, sizeof(un));
++        un.sun_family = AF_UNIX;
++        strcpy(un.sun_path, SQUID_G3_AF_UNIX);
++
++        ud_flags = (COMM_DOBIND|COMM_REUSEADDR);
++        unlink(SQUID_G3_AF_UNIX);
++        new_socket = comm_open_uds(AF_UNIX, 0, &un, ud_flags);
++        chmod(SQUID_G3_AF_UNIX, S_IRWXU|S_IRWXG|S_IRWXO);
++
++        return new_socket;
++    }
+ 
+     PROF_start(comm_open);
+     /* Create socket for accepting new connections. */
+@@ -2104,7 +2125,7 @@
+     /* Setup the socket addrinfo details for use */
+     struct addrinfo AI;
+     AI.ai_flags = 0;
+-    AI.ai_family = PF_UNIX;
++    AI.ai_family = AF_UNIX;
+     AI.ai_socktype = sock_type;
+     AI.ai_protocol = proto;
+     AI.ai_addrlen = SUN_LEN(addr);
+@@ -2136,7 +2157,7 @@
+     debugs(50, 5, HERE << "FD " << new_socket << " is a new socket");
+ 
+     assert(!isOpen(new_socket));
+-    fd_open(new_socket, FD_MSGHDR, NULL);
++    fd_open(new_socket, FD_SOCKET, NULL);
+ 
+     fdd_table[new_socket].close_file = NULL;
+ 
+--- a/src/comm/TcpAcceptor.cc
++++ b/src/comm/TcpAcceptor.cc
+@@ -40,6 +40,7 @@
+ #include "comm/Connection.h"
+ #include "comm/Loops.h"
+ #include "comm/TcpAcceptor.h"
++#include "comm.h"
+ #include "fde.h"
+ #include "ip/Intercept.h"
+ #include "protos.h"
+@@ -51,6 +52,9 @@
+ #include <netinet/tcp.h>
+ #endif
+ 
++/* Whether to use a UD socket for G3 comms. */
++static bool use_ud_socket = false;
++
+ CBDATA_NAMESPACED_CLASS_INIT(Comm, TcpAcceptor);
+ 
+ Comm::TcpAcceptor::TcpAcceptor(const Comm::ConnectionPointer &newConn, const char *note, const Subscription::Pointer &aSub) :
+@@ -261,6 +265,22 @@
+ void
+ Comm::TcpAcceptor::acceptNext()
+ {
++    char ipbuf[MAX_IPSTRLEN];
++    char *ip_addr;
++
++    ip_addr = conn->local.ToURL(ipbuf, MAX_IPSTRLEN);
++	if (strcmp(IP_PORT_FOR_UD, ip_addr) == 0) {
++        /* TA:  This is set to true IFF a connection is is being made to
++         * SQUID_G3_AF_UNIX; the same as in comm_openex();
++         * it is set to false in all other cases when sockets not
++         * matching SQUID_G3_AF_UNIX are found.  Later on, in comm/TcpAcceptor.cc,
++         * the value of this boolean is checked, and the local connection's port is
++         * set to 802, which is what would have happened were this socket opened as
++         * TCP.
++         */
++         use_ud_socket = true;
++	}
++
+     Must(IsConnOpen(conn));
+     debugs(5, 2, HERE << "connection on " << conn);
+     acceptOne();
+@@ -302,9 +322,16 @@
+     ++statCounter.syscalls.sock.accepts;
+     int sock;
+     struct addrinfo *gai = NULL;
++
+     details->local.InitAddrInfo(gai);
+ 
+     errcode = 0; // reset local errno copy.
++
++    /* TA:  2013-06-11:  Note that we eventually end up here, trying to
++     * accept() on an AF_UNIX socket.  ai_addr, and ai_addrlen will both be
++     * NULL, and that's OK---we only need to fake the local port which we do
++     * after this call.
++     */
+     if ((sock = accept(conn->fd, gai->ai_addr, &gai->ai_addrlen)) < 0) {
+         errcode = errno; // store last accept errno locally.
+ 
+@@ -342,6 +369,12 @@
+     getsockname(sock, gai->ai_addr, &gai->ai_addrlen);
+     details->local = *gai;
+     details->local.FreeAddrInfo(gai);
++    /* TA:  2013-06-08:  If we've identified this call as communicating via
++     * the Unix domain socket, then fake the local port to be 802.  This
++     * allows myport/port802 matches in the Squid config to be honoured.
++     */
++    if (use_ud_socket)
++        details->local.SetPort(802);
+ 
+     /* fdstat update */
+     // XXX : these are not all HTTP requests. use a note about type and ip:port details->
+@@ -355,7 +388,11 @@
+     details->remote.NtoA(F->ipaddr,MAX_IPSTRLEN);
+     F->remote_port = details->remote.GetPort();
+     F->local_addr = details->local;
+-    F->sock_family = details->local.IsIPv6()?AF_INET6:AF_INET;
++
++    if (use_ud_socket)
++        F->sock_family = AF_UNIX;
++    else
++        F->sock_family = details->local.IsIPv6()?AF_INET6:AF_INET;
+ 
+     // set socket flags
+     commSetCloseOnExec(sock);
+@@ -366,6 +403,15 @@
+ 
+     // Perform NAT or TPROXY operations to retrieve the real client/dest IP addresses
+     if (conn->flags&(COMM_TRANSPARENT|COMM_INTERCEPTION) && !Ip::Interceptor.Lookup(details, conn)) {
++        /* This allows transparent mode to work with a UDSocket.  When we
++         * get here, Ip::Interceptor.Lookup() has changed the socket
++         * accordingly, but in our case, it's not fatal, so return OK.
++         */
++        if (use_ud_socket) {
++            use_ud_socket = false;
++            return COMM_OK;
++        }
++
+         // Failed.
+         return COMM_ERROR;
+     }
+--- a/src/comm.h
++++ b/src/comm.h
+@@ -9,6 +9,10 @@
+ #include "comm/IoCallback.h"
+ #include "StoreIOBuffer.h"
+ 
++/* DEFINEs for using a UD socket for G3. */
++#define SQUID_G3_AF_UNIX "/tmp/squidshim.sock"
++#define IP_PORT_FOR_UD "127.0.0.1:802"
++
+ /* comm.c */
+ extern bool comm_iocallbackpending(void); /* inline candidate */
+ 

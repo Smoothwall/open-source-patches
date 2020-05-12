@@ -1,0 +1,83 @@
+Description: Make cassandra init script Smoothwall compatible.
+ The init script that is bundled with Cassandra expects 'lsb' and
+ 'initscripts' packages to be available and these are not provided
+ on a Smoothwall system.
+Author: Martin Prtichard <martin.pritchard@smoothwall.net>
+---
+--- a/cassandra/etc/init.d/cassandra
++++ b/cassandra/etc/init.d/cassandra
+@@ -43,13 +43,6 @@
+ # Export JAVA_HOME, if set.
+ [ -n "$JAVA_HOME" ] && export JAVA_HOME
+ 
+-# Load the VERBOSE setting and other rcS variables
+-. /lib/init/vars.sh
+-
+-# Define LSB log_* functions.
+-# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+-. /lib/lsb/init-functions
+-
+ #
+ # Function that returns 0 if process is running, or nonzero if not.
+ #
+@@ -115,36 +108,36 @@
+ 
+ case "$1" in
+   start)
+-	[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
++	[ "$VERBOSE" != no ] && echo "Starting $DESC" "$NAME"
+ 	do_start
+ 	case "$?" in
+-		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+-		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
++		0|1) exit 0 ;;
++		2) exit 1 ;;
+ 	esac
+ 	;;
+   stop)
+-	[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
++	[ "$VERBOSE" != no ] && echo "Stopping $DESC" "$NAME"
+ 	do_stop
+ 	case "$?" in
+-		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+-		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
++		0|1) exit 0 ;;
++		2) exit 1 ;;
+ 	esac
+ 	;;
+   restart|force-reload)
+-	log_daemon_msg "Restarting $DESC" "$NAME"
++	[ "$VERBOSE" != no ] && echo "Restarting $DESC" "$NAME"
+ 	do_stop
+ 	case "$?" in
+ 	  0|1)
+ 		do_start
+ 		case "$?" in
+-			0) log_end_msg 0 ;;
+-			1) log_end_msg 1 ;; # Old process is still running
+-			*) log_end_msg 1 ;; # Failed to start
++			0) exit 0 ;;
++			1) exit 1 ;; # Old process is still running
++			*) exit 1 ;; # Failed to start
+ 		esac
+ 		;;
+ 	  *)
+ 	  	# Failed to stop
+-		log_end_msg 1
++		exit 1
+ 		;;
+ 	esac
+ 	;;
+@@ -152,9 +145,9 @@
+     is_running
+     stat=$?
+     case "$stat" in
+-      0) log_success_msg "$DESC is running" ;;
+-      1) log_failure_msg "could not access process from pidfile for $DESC" ;;
+-      *) log_success_msg "$DESC is not running" ;;
++      0) echo "$DESC is running" ;;
++      1) echo "could not access process from pidfile for $DESC" ;;
++      *) echo "$DESC is not running" ;;
+     esac
+     exit "$stat"
+     ;;

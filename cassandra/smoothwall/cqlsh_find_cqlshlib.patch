@@ -1,0 +1,13 @@
+Description: Provide cqlsh with a $PYTHONPATH
+ Set $PYTHONPATH when calling cqlsh so that it can find
+ cqlshlib correctly.
+Author: Martin Prtichard <martin.pritchard@smoothwall.net>
+---
+--- a/cassandra/usr/bin/cqlsh
++++ b/cassandra/usr/bin/cqlsh
+@@ -16,4 +16,4 @@
+ # limitations under the License.
+ 
+ 
+-python "`dirname "$0"`/cqlsh.py" "$@"
++PYTHONPATH=/usr/share/pyshared python "`dirname "$0"`/cqlsh.py" "$@"

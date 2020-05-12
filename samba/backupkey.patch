@@ -1,0 +1,273 @@
+#
+# Coverity-inspired patches to BackupKey, which is more important now
+# that we support both the ClientWrap and ServerWrap protocols (demanded
+# by modern Windows).
+#
+# The first patch set is the most important, from
+# https://bugzilla.samba.org/show_bug.cgi?id=11416
+#
+# git format-patch 8e195fb52ecfa3c263f68b74f989fb48a3c9116f..4891a98e20d0719274f6685dfbc39413c9ab39d0  --stdout > debian/patches/backupkey.patch
+# git format-patch b57c77849af968e7a89df40d05b2e3ef7cef42c1 -1 --stdout >> debian/patches/backupkey.patch
+#
+From 5ea5d876bf9c33b1805109af79005e3437a656a1 Mon Sep 17 00:00:00 2001
+From: Volker Lendecke <vl@samba.org>
+Date: Wed, 4 Mar 2015 10:29:53 +0100
+Subject: [PATCH 1/5] backupkey: Slightly simplify
+ bkrp_do_retrieve_server_wrap_key
+
+Signed-off-by: Volker Lendecke <vl@samba.org>
+Reviewed-by: David Disseldorp <ddiss@samba.org>
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index 3cda93dd..0518d2e 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -1417,7 +1417,8 @@ static WERROR bkrp_do_retrieve_server_wrap_key(TALLOC_CTX *mem_ctx, struct ldb_c
+ 	if (!NT_STATUS_IS_OK(status)) {
+ 		DEBUG(10, ("Error while fetching secret %s\n", secret_name));
+ 		return WERR_INVALID_DATA;
+-	} else if (guid_binary.length == 0) {
++	}
++	if (guid_binary.length == 0) {
+ 		/* RODC case, we do not have secrets locally */
+ 		DEBUG(1, ("Unable to fetch value for secret %s, are we an undetected RODC?\n",
+ 			  secret_name));
+-- 
+2.8.0.rc3
+
+
+From 00e751d2be80c555aca71724cfb6fdb4602c1131 Mon Sep 17 00:00:00 2001
+From: Volker Lendecke <vl@samba.org>
+Date: Wed, 4 Mar 2015 10:33:38 +0100
+Subject: [PATCH 2/5] backupkey: Simplify get_lsa_secret
+
+Signed-off-by: Volker Lendecke <vl@samba.org>
+Reviewed-by: David Disseldorp <ddiss@samba.org>
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index 0518d2e..a001c55 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -219,9 +219,11 @@ static NTSTATUS get_lsa_secret(TALLOC_CTX *mem_ctx,
+ 	if (ret != LDB_SUCCESS) {
+ 		talloc_free(tmp_mem);
+ 		return NT_STATUS_INTERNAL_DB_CORRUPTION;
+-	} else if (res->count == 0) {
++	}
++	if (res->count == 0) {
+ 		return NT_STATUS_RESOURCE_NAME_NOT_FOUND;
+-	} else if (res->count > 1) {
++	}
++	if (res->count > 1) {
+ 		DEBUG(2, ("Secret %s collision\n", name));
+ 		talloc_free(tmp_mem);
+ 		return NT_STATUS_INTERNAL_DB_CORRUPTION;
+-- 
+2.8.0.rc3
+
+
+From 7e4daaacb6b256e08ac7491aa9e98d0dc56d137b Mon Sep 17 00:00:00 2001
+From: Volker Lendecke <vl@samba.org>
+Date: Wed, 4 Mar 2015 10:33:57 +0100
+Subject: [PATCH 3/5] backupkey: Fix a memleak
+
+Signed-off-by: Volker Lendecke <vl@samba.org>
+Reviewed-by: David Disseldorp <ddiss@samba.org>
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index a001c55..7757533 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -221,6 +221,7 @@ static NTSTATUS get_lsa_secret(TALLOC_CTX *mem_ctx,
+ 		return NT_STATUS_INTERNAL_DB_CORRUPTION;
+ 	}
+ 	if (res->count == 0) {
++		talloc_free(tmp_mem);
+ 		return NT_STATUS_RESOURCE_NAME_NOT_FOUND;
+ 	}
+ 	if (res->count > 1) {
+-- 
+2.8.0.rc3
+
+
+From 969519b3b53e1ba12a261764fc4d5785524a245f Mon Sep 17 00:00:00 2001
+From: Volker Lendecke <vl@samba.org>
+Date: Wed, 4 Mar 2015 10:35:47 +0100
+Subject: [PATCH 4/5] backupkey: Fix CID 1273293 Uninitialized scalar variable
+
+Signed-off-by: Volker Lendecke <vl@samba.org>
+Reviewed-by: David Disseldorp <ddiss@samba.org>
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index 7757533..52217ee 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -1421,7 +1421,7 @@ static WERROR bkrp_do_retrieve_server_wrap_key(TALLOC_CTX *mem_ctx, struct ldb_c
+ 		DEBUG(10, ("Error while fetching secret %s\n", secret_name));
+ 		return WERR_INVALID_DATA;
+ 	}
+-	if (guid_binary.length == 0) {
++	if (lsa_secret.length == 0) {
+ 		/* RODC case, we do not have secrets locally */
+ 		DEBUG(1, ("Unable to fetch value for secret %s, are we an undetected RODC?\n",
+ 			  secret_name));
+-- 
+2.8.0.rc3
+
+
+From 4891a98e20d0719274f6685dfbc39413c9ab39d0 Mon Sep 17 00:00:00 2001
+From: Volker Lendecke <vl@samba.org>
+Date: Wed, 4 Mar 2015 10:36:40 +0100
+Subject: [PATCH 5/5] backupkey: Remove an unused variable
+
+Signed-off-by: Volker Lendecke <vl@samba.org>
+Reviewed-by: David Disseldorp <ddiss@samba.org>
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index 52217ee..04308bc 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -1398,7 +1398,7 @@ static WERROR bkrp_do_retrieve_server_wrap_key(TALLOC_CTX *mem_ctx, struct ldb_c
+ 					       struct GUID *guid)
+ {
+ 	NTSTATUS status;
+-	DATA_BLOB guid_binary, lsa_secret;
++	DATA_BLOB lsa_secret;
+ 	char *secret_name;
+ 	char *guid_string;
+ 	enum ndr_err_code ndr_err;
+-- 
+2.8.0.rc3
+
+From b57c77849af968e7a89df40d05b2e3ef7cef42c1 Mon Sep 17 00:00:00 2001
+From: Rajesh Joseph <rjoseph@redhat.com>
+Date: Tue, 31 Mar 2015 18:58:54 +0530
+Subject: [PATCH] rpc_server: Coverity fix for CID 1273079
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+leaked_storage: Variable pk going out of scope leaks the storage it points to.
+
+On failure get_pk_from_raw_keypair_params function should free up
+the private key (pk) it allocates internally.
+
+Signed-off-by: Rajesh Joseph <rjoseph@redhat.com>
+Reviewed-by: Guenther Deschner <gd@samba.org>
+Reviewed-by: Ira Cooper <ira@samba.org>
+
+Autobuild-User(master): Günther Deschner <gd@samba.org>
+Autobuild-Date(master): Thu Apr  2 19:38:22 CEST 2015 on sn-devel-104
+---
+ source4/rpc_server/backupkey/dcesrv_backupkey.c | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/source4/rpc_server/backupkey/dcesrv_backupkey.c b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+index b3b7074..3edd1b6 100644
+--- a/source4/rpc_server/backupkey/dcesrv_backupkey.c
++++ b/source4/rpc_server/backupkey/dcesrv_backupkey.c
+@@ -306,6 +306,7 @@ static NTSTATUS get_pk_from_raw_keypair_params(TALLOC_CTX *ctx,
+ 	hx509_context hctx;
+ 	RSA *rsa;
+ 	struct hx509_private_key_ops *ops;
++	hx509_private_key privkey = NULL;
+ 
+ 	hx509_context_init(&hctx);
+ 	ops = hx509_find_private_alg(&_hx509_signature_rsa_with_var_num.algorithm);
+@@ -314,13 +315,14 @@ static NTSTATUS get_pk_from_raw_keypair_params(TALLOC_CTX *ctx,
+ 		return NT_STATUS_INTERNAL_ERROR;
+ 	}
+ 
+-	if (hx509_private_key_init(pk, ops, NULL) != 0) {
++	if (hx509_private_key_init(&privkey, ops, NULL) != 0) {
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_NO_MEMORY;
+ 	}
+ 
+ 	rsa = RSA_new();
+ 	if (rsa ==NULL) {
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+@@ -328,52 +330,62 @@ static NTSTATUS get_pk_from_raw_keypair_params(TALLOC_CTX *ctx,
+ 	rsa->n = reverse_and_get_bignum(ctx, &(keypair->modulus));
+ 	if (rsa->n == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->d = reverse_and_get_bignum(ctx, &(keypair->private_exponent));
+ 	if (rsa->d == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->p = reverse_and_get_bignum(ctx, &(keypair->prime1));
+ 	if (rsa->p == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->q = reverse_and_get_bignum(ctx, &(keypair->prime2));
+ 	if (rsa->q == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->dmp1 = reverse_and_get_bignum(ctx, &(keypair->exponent1));
+ 	if (rsa->dmp1 == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->dmq1 = reverse_and_get_bignum(ctx, &(keypair->exponent2));
+ 	if (rsa->dmq1 == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->iqmp = reverse_and_get_bignum(ctx, &(keypair->coefficient));
+ 	if (rsa->iqmp == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 	rsa->e = reverse_and_get_bignum(ctx, &(keypair->public_exponent));
+ 	if (rsa->e == NULL) {
+ 		RSA_free(rsa);
++		hx509_private_key_free(&privkey);
+ 		hx509_context_free(&hctx);
+ 		return NT_STATUS_INVALID_PARAMETER;
+ 	}
+ 
++	*pk = privkey;
++
+ 	hx509_private_key_assign_rsa(*pk, rsa);
+ 
+ 	hx509_context_free(&hctx);
+-- 
+2.8.0.rc3
+

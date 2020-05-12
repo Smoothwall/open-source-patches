@@ -1,0 +1,15 @@
+Description: Include debug symbols when building libcoro-perl.
+ This patch allows for a debug package to be generated that is
+ required for debugging the Coro XS module.
+Author: Martin Prtichard <martin.pritchard@smoothwall.net>
+---
+--- a/Makefile.PL
++++ b/Makefile.PL
+@@ -67,6 +67,7 @@
+ 	            },
+     NAME         => "Coro",
+     VERSION_FROM => "Coro.pm",
++	OPTIMISE     => '-g -O2',
+     DIR          => ['Coro', ($EVENT ? 'Event' : ()), ($EV ? "EV" : ())],
+     PREREQ_PM    => {
+        common::sense    => 0,

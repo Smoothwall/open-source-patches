@@ -1,0 +1,10 @@
+--- makedev.orig/makedev.d/linux-2.4.x	2012-09-04 11:01:10.987510883 +0100
++++ makedev/makedev.d/linux-2.4.x	2013-01-28 16:20:48.472841046 +0000
+@@ -300,6 +300,7 @@
+ # PA-RISC only
+ # c $SERIAL               11   0  1   4 ttyB%d
+ b $STORAGE              11   0  1  32 scd%d
++b $STORAGE              11   0  1  32 sr%d
+ 
+ c $STORAGE              12   2  1   1 ntpqic11
+ c $STORAGE              12   3  1   1 tpqic11

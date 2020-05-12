@@ -1,0 +1,15 @@
+--- snort/src/snort.c	2012-06-13 15:48:25.950174182 +0100
++++ snort.new/src/snort.c	2012-06-13 15:48:14.760777199 +0100
+@@ -2914,7 +2914,11 @@
+             if ( !ScReadMode() || !PQ_Next() )
+             {
+                 /* If not read-mode or no next pcap, we're done */
+-                break;
++		// KJ 13/06/12:
++		// This behaviour has changed since 2.8.5
++		// In the old version this never happened
++		// In order to resolve bug# 6060 
++                //break;
+             }
+         }
+         /* Check for any pending signals when no packets are read*/

@@ -1,0 +1,48 @@
+Description: Make server affinity cache entries expire
+ Server affinity cache entries have a TTL / expiry. After which they
+ are supposed to be deleted by the next saf_fetch call.
+ saf_store was being called repeatedly, causing entries in the cache to
+ never time out, instead getting their expiry time's reset (they last for
+ the value of SAF_TTL, 900s).
+ This change adds a check to saf_store, and if it already exists, the call
+ to store the entry is skipped.
+Author: Jonathan Barron <jonathan.barron@smoothwall.net>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: samba/source3/libsmb/namequery.c
+===================================================================
+--- samba.orig/source3/libsmb/namequery.c	2016-08-09 08:52:28.441462161 +0100
++++ samba/source3/libsmb/namequery.c	2016-08-09 08:59:26.985213816 +0100
+@@ -61,6 +61,7 @@
+ bool saf_store( const char *domain, const char *servername )
+ {
+ 	char *key;
++	char *saf_server;
+ 	time_t expire;
+ 	bool ret = False;
+ 
+@@ -76,6 +77,16 @@
+ 		return False;
+ 	}
+ 
++	saf_server = saf_fetch( talloc_tos(), domain );
++	/* If the value already exists in the saf cache, do not re-add it */
++	if ( saf_server != NULL && strcmp(saf_server, servername) == 0 ) {
++		DEBUG(10,("saf_store: "
++			"Refusing to store, entry %s for domain %s already exists!\n",
++				servername, domain));
++		TALLOC_FREE( saf_server );
++		return True;
++	}
++
+ 	key = saf_key(talloc_tos(), domain);
+ 	if (key == NULL) {
+ 		DEBUG(1, ("saf_key() failed\n"));
+@@ -89,6 +100,7 @@
+ 	ret = gencache_set( key, servername, expire );
+ 
+ 	TALLOC_FREE( key );
++	TALLOC_FREE( saf_server );
+ 
+ 	return ret;
+ }

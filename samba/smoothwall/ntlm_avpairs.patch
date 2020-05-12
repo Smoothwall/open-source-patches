@@ -1,0 +1,32 @@
+Description:
+ When used in multiple domain environments, we fake up a Stage 2
+ challenge because we can't get one from the Domain (we do not yet
+ know which domain is appropriate). The fake Stage 2 has a different
+ TargetInfo structure than the Stage 1 that arrived from the client,
+ causing the Stage 3 from the client to differ too.
+
+ ntlm_auth rejects this as a violation of handshake integrity. But
+ the DC (and winbindd) don't care.
+
+ Skip the TargetInfo check if the attribute/value pair counts
+ mismatch, allowing NTLM auth to work as before.
+Author: Rebecca Gellman <rebecca.gellman@smoothwall.net>
+===================================================================
+--- a/auth/ntlmssp/ntlmssp_server.c
++++ b/auth/ntlmssp/ntlmssp_server.c
+@@ -528,6 +528,7 @@
+ 
+ 		count = ntlmssp_state->server.av_pair_list.count;
+ 		if (v2_resp.Challenge.AvPairs.count < count) {
++			goto no_targetinfo;
+ 			return NT_STATUS_INVALID_PARAMETER;
+ 		}
+ 
+@@ -626,6 +627,7 @@
+ 		}
+ 	}
+ 
++no_targetinfo:
+ 	nttime_to_timeval(&endtime, ntlmssp_state->server.challenge_endtime);
+ 	expired = timeval_expired(&endtime);
+ 	if (expired) {

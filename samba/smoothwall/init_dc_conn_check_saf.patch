@@ -1,0 +1,51 @@
+Description: Use saf_cache when deciding to keep open connection
+ Adds a check to run saf_fetch when deciding whether to keep an open
+ connection in use.
+ Without this, the saf_cache will be ignored, even if an entry expires
+ providing the connection to the DC does not break. Now when the saf_cache
+ expires, saf_fetch will return an error, leading to the connection being
+ invalidated and the cycle continuing.
+Author: Jonathan Barron <jonathan.barron@smoothwall.net>
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: samba/source3/winbindd/winbindd_cm.c
+===================================================================
+--- samba.orig/source3/winbindd/winbindd_cm.c	2016-08-12 15:09:21.705968429 +0100
++++ samba/source3/winbindd/winbindd_cm.c	2016-08-12 15:10:03.898414408 +0100
+@@ -1962,6 +1962,8 @@
+ static NTSTATUS init_dc_connection_network(struct winbindd_domain *domain, bool need_rw_dc)
+ {
+ 	NTSTATUS result;
++	char *saf_server;
++
+ 	bool skip_connection = domain->internal;
+ 	if (need_rw_dc && domain->rodc) {
+ 		skip_connection = false;
+@@ -1972,11 +1974,18 @@
+ 		return NT_STATUS_CANT_ACCESS_DOMAIN_INFO;
+ 	}
+ 
++ 	saf_server = saf_fetch(talloc_tos(), domain->name);
++
+ 	/* Still ask the internal LSA and SAMR server about the local domain */
+-	if (skip_connection || connection_ok(domain)) {
++	if (skip_connection || connection_ok(domain)
++			&& saf_server != NULL
++			&& domain->dcname != NULL
++			&& strcmp(saf_server, domain->dcname) == 0)
++	{
+ 		if (!domain->initialized) {
+ 			set_dc_type_and_flags(domain);
+ 		}
++		TALLOC_FREE( saf_server );
+ 		return NT_STATUS_OK;
+ 	}
+ 
+@@ -1996,6 +2005,7 @@
+ 		set_dc_type_and_flags(domain);
+ 	}
+ 
++	TALLOC_FREE( saf_server );
+ 	return result;
+ }
+ 

@@ -1,0 +1,139 @@
+Binary files p3scan-2.2/.p3scan.c.swp and p3scan-2.2.new/.p3scan.c.swp differ
+Binary files p3scan-2.2/.p3scan.h.swp and p3scan-2.2.new/.p3scan.h.swp differ
+diff -Nurb p3scan-2.2/p3scan.c p3scan-2.2.new/p3scan.c
+--- p3scan-2.2/p3scan.c	2005-09-16 14:00:00.000000000 +0100
++++ p3scan-2.2.new/p3scan.c	2005-09-20 09:50:51.000000000 +0100
+@@ -126,7 +126,8 @@
+    vsnprintf(puffer, 4000, fmt, az);
+    strcpy(timenow,ctime(&now)+ 11);
+    if (!config->debug){
+-     openlog(config->syslogname, LOGOPT, LOGFAC);
++     //openlog(config->syslogname, LOGOPT, LOGFAC);
++     openlog(config->syslogname, LOGOPT, LOG_MAIL);
+      syslog(LOG_NOTICE, "%s\n", puffer);
+      closelog();
+    } else {
+@@ -1298,7 +1299,8 @@
+        context_uninit(p);
+        unlink(mail);
+        w_free(mail,"mail1");
+-       if (ret<0) do_log(LOG_EMERG, "Can't open alternale mail notification template %s",p->vnmsg);
++       //if (ret<0) do_log(LOG_EMERG, "Can't open alternale mail notification template %s",p->vnmsg);
++       if (ret<0) do_log(LOG_EMERG, "Can't open alternate mail notification template %s",p->vnmsg);
+        else do_log(LOG_EMERG, "Can't create virus warning mail message %s",p->mailfile);
+        return -1;
+      }
+@@ -1418,7 +1420,7 @@
+    int error;
+    int maybe_a_space; // signals a space in the keyword for setting USERNAME var
+    int clientret, serverret;
+-   unsigned long len, smtpsze;
++   unsigned long len = 0, smtpsze;
+    char buf[64];
+ #ifdef SET_TOS
+    int tos;
+@@ -1462,7 +1464,8 @@
+       p->server_addr.sin_port = config->targetaddr.sin_port;
+    }
+ 
+-   do_log(LOG_NOTICE, "Real-server adress is %s:%i", inet_ntoa(p->server_addr.sin_addr), ntohs(p->server_addr.sin_port));
++   //do_log(LOG_NOTICE, "Real-server adress is %s:%i", inet_ntoa(p->server_addr.sin_addr), ntohs(p->server_addr.sin_port));
++   do_log(LOG_NOTICE, "Real-server address is %s:%i", inet_ntoa(p->server_addr.sin_addr), ntohs(p->server_addr.sin_port));
+    /* open socket to 'real-server' */
+    if ((p->server_fd = socket(PF_INET, SOCK_STREAM, 0)) < 0){
+       do_log(LOG_CRIT, "Cannot open socket to real-server");
+@@ -1876,19 +1879,17 @@
+                      paramlist_set(p->params, "%MAILFILE%", p->mailfile);
+                      if (config->delit) paramlist_set(p->params, "%P3SCANID%", config->notify);
+                      else paramlist_set(p->params, "%P3SCANID%", p->filename);
+-                     do_log(LOG_WARNING, "%s from %s:%s to %s:%s from %s to %s user: %s virus: %s file: %s",
+-                        paramlist_get(p->params,"%PROTOCOL%"),
++                     do_log(LOG_WARNING, "VIRUS: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) virus: (%s) bytes: (%lu)",
+                         paramlist_get(p->params,"%CLIENTIP%"), paramlist_get(p->params,"%CLIENTPORT%"),
+                         paramlist_get(p->params,"%SERVERIP%"), paramlist_get(p->params,"%SERVERPORT%"),
+                         paramlist_get(p->params,"%MAILFROM%"), paramlist_get(p->params,"%MAILTO%"),
+                         paramlist_get(p->params,"%USERNAME%"), paramlist_get(p->params,"%VIRUSNAME%"),
+-                        paramlist_get(p->params,"%P3SCANID%")
+-                     );
++						len);
+                      if (do_virusaction(p)!=0){
+                         if (p->cksmtp) {
+                            /* Try cleaning it up again */
+-                           do_log(LOG_CRIT,"Virusaction failed. Sending 554 and reseting smtp data sent.");
+-                           do_log(LOG_DEBUG,"Virusaction failed. Sending 554 and reseting smtp data sent.");
++                           do_log(LOG_CRIT,"Virusaction failed. Sending 554 and resetting smtp data sent.");
++                           do_log(LOG_DEBUG,"Virusaction failed. Sending 554 and resetting smtp data sent.");
+                            writeline_format(p->client_fd, WRITELINE_LEADING_RN, "554 %s",config->smtprset);
+                            do_log(LOG_DEBUG,"Sending RSET to real smtp server.");
+                            writeline_format(p->server_fd, WRITELINE_LEADING_RN, "RSET");
+@@ -1904,7 +1905,13 @@
+                      p->clientbuf->linelen=GETLINE_LINE_NULL;
+                      p->serverbuf->linelen=GETLINE_LINE_NULL;
+                      if (config->delit) unlink(p->mailfile);
+-                  } /* virus */
++                  } /* virus */ else {
++					do_log(LOG_WARNING, "CLEAN: from (%s:%s) to (%s:%s) from (%s) to (%s) user: (%s) bytes: (%lu)",
++                        paramlist_get(p->params,"%SERVERIP%"), paramlist_get(p->params,"%SERVERPORT%"),
++                        paramlist_get(p->params,"%CLIENTIP%"), paramlist_get(p->params,"%CLIENTPORT%"),
++                        paramlist_get(p->params,"%MAILFROM%"), paramlist_get(p->params,"%MAILTO%"),
++                        paramlist_get(p->params,"%USERNAME%"), len);
++				  }
+                   /* see if there was a critical error */
+                   if (scannerret==SCANNER_RET_CRIT){
+                      if (!p->errmsg) do_log(LOG_CRIT,"Error writing to client!");
+@@ -1964,11 +1971,11 @@
+          } else if (trapcapa1 && !strncasecmp(p->serverbuf->line,"PIPELINING",10)){
+             p->serverbuf->linelen=GETLINE_LINE_NULL; /* don't sent to client */
+             trapcapa1=0;
+-            do_log(LOG_WARNING, "Ignoring servers PIPELINING capability...");
++            //do_log(LOG_WARNING, "Ignoring servers PIPELINING capability...");
+          } else if (!config->enabletop && trapcapa2 && !strncasecmp(p->serverbuf->line,"TOP",3)){
+            p->serverbuf->linelen=GETLINE_LINE_NULL; /* don't sent to client */
+            trapcapa2=0;
+-           do_log(LOG_WARNING, "Ignoring servers TOP capability...");
++           //do_log(LOG_WARNING, "Ignoring servers TOP capability...");
+          }
+       } /* server_buf_len >0 */
+       /* we are not in mail-reading mode (ismail==0) */
+@@ -2235,12 +2242,11 @@
+             break;
+          case 'l': /* PID File */
+             config->pidfile=arg;
+-            if ((pidfd=open(config->pidfile,O_RDONLY ))>=0){
++            /*if ((pidfd=open(config->pidfile,O_RDONLY ))>=0){
+                do_log(LOG_EMERG, "%s exists! Aborting!",config->pidfile);
+-               /* Should not reach here. We are dead. */
+                pidfd=close(pidfd);
+                exit(0);
+-            }
++            }*/
+             break;
+          case 'L': /* SSL port */
+             i=strtol(arg, &rest, 10);
+@@ -2617,7 +2623,7 @@
+       config->scanner->uninit1();
+       do_log(LOG_DEBUG, "uninit1 done");
+    }
+-   if((ret=unlink(config->pidfile)!=0)) do_log(LOG_NOTICE, "Unable to remove %s", config->pidfile);
++   //if((ret=unlink(config->pidfile)!=0)) do_log(LOG_NOTICE, "Unable to remove %s", config->pidfile);
+    do_log(LOG_NOTICE, PROGNAME " terminates now");
+    exit(0);
+ }
+@@ -2669,7 +2675,7 @@
+          }else do_log(LOG_CRIT, "Can't write PID to %s", PID_FILE);
+       };
+       /* chown /var/run/p3scan/p3scan.pid mail:mail */
+-      if (!config->debug){
++      /*if (!config->debug){
+          len=strlen(CHOWNCMD)+1+strlen(config->runasuser)+1+strlen(config->runasuser)+1+strlen(config->pidfile)+1;
+          snprintf(chownit, len, "%s %s:%s %s", CHOWNCMD, config->runasuser, config->runasuser, config->pidfile);
+          if ((chowncmd=popen(chownit, "r"))==NULL){
+@@ -2677,7 +2683,7 @@
+             return SCANNER_RET_ERR;
+          }
+          ret=pclose(chowncmd);
+-      }
++      }*/
+    }
+    avoid_root();
+    signal(SIGCHLD, do_sigchld);

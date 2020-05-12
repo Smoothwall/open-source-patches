@@ -1,0 +1,48 @@
+From a0f9daa9c3cc2b37b9707b228263eb717d201371 Mon Sep 17 00:00:00 2001
+From: "djm@openbsd.org" <djm@openbsd.org>
+Date: Fri, 10 Mar 2017 03:18:24 +0000
+Subject: upstream commit
+
+correctly hash hosts with a port number. Reported by Josh
+Powers in bz#2692; ok dtucker@
+
+Upstream-ID: 468e357ff143e00acc05bdd2803a696b3d4b6442
+
+Origin: https://anongit.mindrot.org/openssh.git/commit/?id=8a2834454c73dfc1eb96453c0e97690595f3f4c2
+Bug: https://bugzilla.mindrot.org/show_bug.cgi?id=2692
+Bug-Debian: https://bugs.debian.org/857736
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1670745
+Last-Update: 2017-03-14
+
+Patch-Name: ssh-keyscan-hash-port.patch
+---
+ ssh-keyscan.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/ssh-keyscan.c b/ssh-keyscan.c
+index c30d54e6..24b51ff1 100644
+--- a/ssh-keyscan.c
++++ b/ssh-keyscan.c
+@@ -321,16 +321,17 @@ keygrab_ssh2(con *c)
+ }
+ 
+ static void
+-keyprint_one(char *host, struct sshkey *key)
++keyprint_one(const char *host, struct sshkey *key)
+ {
+ 	char *hostport;
+-
+-	if (hash_hosts && (host = host_hash(host, NULL, 0)) == NULL)
+-		fatal("host_hash failed");
++	const char *known_host, *hashed;
+ 
+ 	hostport = put_host_port(host, ssh_port);
++	if (hash_hosts && (hashed = host_hash(host, NULL, 0)) == NULL)
++		fatal("host_hash failed");
++	known_host = hash_hosts ? hashed : hostport;
+ 	if (!get_cert)
+-		fprintf(stdout, "%s ", hostport);
++		fprintf(stdout, "%s ", known_host);
+ 	sshkey_write(key, stdout);
+ 	fputs("\n", stdout);
+ 	free(hostport);

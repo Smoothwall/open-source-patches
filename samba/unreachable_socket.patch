@@ -1,0 +1,62 @@
+Author: Jeremy Allison <jra@samba.org>
+Date: Mon, 17 Oct 2016 10:07:23 -0700
+Subject: [PATCH] s3: cldap: cldap_multi_netlogon_send() fails with one bad
+ IPv6 address.
+
+Analysis by: Rebecca Gellman <rebecca@starfleet-net.co.uk>
+
+Ignore cldap_socket_init() failure when sending
+multiple cldap netlogon requests. Allow cldap_netlogon_send()
+to catch the bad address and correctly return through a
+tevent subreq.
+
+Make sure cldap_search_send() copes with cldap parameter == NULL.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=12381
+
+Signed-off-by: Jeremy Allison <jra@samba.org>
+---
+ libcli/cldap/cldap.c   |  5 +++++
+ source3/libads/cldap.c | 17 +++++++++++++++--
+ 2 files changed, 20 insertions(+), 2 deletions(-)
+
+--- a/source3/libads/cldap.c
++++ b/source3/libads/cldap.c
+@@ -117,8 +117,21 @@
+ 					   NULL, /* local_addr */
+ 					   state->servers[i],
+ 					   &state->cldap[i]);
+-		if (tevent_req_nterror(req, status)) {
+-			return tevent_req_post(req, ev);
++		if (!NT_STATUS_IS_OK(status)) {
++			/*
++			 * Don't error out all sends just
++			 * because one cldap_socket_init() failed.
++			 * Log it here, and the cldap_netlogon_send()
++			 * will catch it (with in.dest_address == NULL)
++			 * and correctly error out in
++			 * cldap_multi_netlogon_done(). This still allows
++			 * the other requests to be concurrently sent.
++			 */
++			DEBUG(2, ("cldap_socket_init failed for %s "
++				" error %s\n",
++				tsocket_address_string(state->servers[i],
++					req),
++				nt_errstr(status)));
+ 		}
+ 
+ 		state->ios[i].in.dest_address	= NULL;
+--- a/libcli/cldap/cldap.c
++++ b/libcli/cldap/cldap.c
+@@ -585,6 +585,11 @@
+ 
+ 	talloc_set_destructor(state, cldap_search_state_destructor);
+ 
++	if (state->caller.cldap == NULL) {
++		tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
++		goto post;
++	}
++
+ 	if (io->in.dest_address) {
+ 		if (cldap->connected) {
+ 			tevent_req_nterror(req, NT_STATUS_PIPE_CONNECTED);

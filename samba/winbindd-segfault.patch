@@ -1,0 +1,48 @@
+Fix segfault caused by unneeded (and possibly NULL) parameter
+
+Backported from https://attachments.samba.org/attachment.cgi?id=11190.
+
+--- a/source3/winbindd/winbindd_pam.c
++++ b/source3/winbindd/winbindd_pam.c
+@@ -1142,7 +1142,6 @@
+ static NTSTATUS winbind_samlogon_retry_loop(struct winbindd_domain *domain,
+ 					    TALLOC_CTX *mem_ctx,
+ 					    uint32_t logon_parameters,
+-					    const char *server,
+ 					    const char *username,
+ 					    const char *domainname,
+ 					    const char *workstation,
+@@ -1266,7 +1265,7 @@
+ 					netlogon_pipe,
+ 					mem_ctx,
+ 					logon_parameters,
+-					server,		/* server name */
++					domain->dcname, /* server name */
+ 					username,	/* user name */
+ 					domainname,	/* target domain */
+ 					workstation,	/* workstation */
+@@ -1280,7 +1279,7 @@
+ 					netlogon_pipe,
+ 					mem_ctx,
+ 					logon_parameters,
+-					server,		/* server name */
++					domain->dcname,	/* server name */
+ 					username,	/* user name */
+ 					domainname,	/* target domain */
+ 					workstation,	/* workstation */
+@@ -1443,7 +1442,6 @@
+ 	result = winbind_samlogon_retry_loop(domain,
+ 					     mem_ctx,
+ 					     0,
+-					     domain->dcname,
+ 					     name_user,
+ 					     name_domain,
+ 					     global_myname(),
+@@ -1864,7 +1862,6 @@
+ 	result = winbind_samlogon_retry_loop(domain,
+ 					     state->mem_ctx,
+ 					     state->request->data.auth_crap.logon_parameters,
+-					     domain->dcname,
+ 					     name_user,
+ 					     name_domain,
+ 					     /* Bug #3248 - found by Stefan Burkei. */

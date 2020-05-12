@@ -1,0 +1,20 @@
+From: Harry Mason <harry.mason@smoothwall.net>
+Subject: Disable arpd
+
+Smoothwall doesn't use it, and it has dependencies we don't currently provide.
+Build the other misc/ tools as they are standalone.
+
+Author: Harry Mason <harry.mason@smoothwall.net>
+Forwarded: not-needed
+
+--- a/misc/Makefile
++++ b/misc/Makefile
+@@ -1,7 +1,7 @@
+ SSOBJ=ss.o ssfilter.o
+ LNSTATOBJ=lnstat.o lnstat_util.o
+ 
+-TARGETS=ss nstat ifstat rtacct arpd lnstat
++TARGETS=ss nstat ifstat rtacct lnstat
+ 
+ include ../Config
+ 

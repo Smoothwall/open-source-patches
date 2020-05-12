@@ -1,0 +1,18 @@
+diff --git a/lib/util/wscript_build b/lib/util/wscript_build
+index cb9e8e5..b8fc787 100755
+--- a/lib/util/wscript_build
++++ b/lib/util/wscript_build
+@@ -20,11 +20,10 @@ bld.SAMBA_SUBSYSTEM('close-low-fd',
+                     deps='replace',
+                     local_include=False)
+ 
+-bld.SAMBA_LIBRARY('samba-debug',
++bld.SAMBA_SUBSYSTEM('samba-debug',
+                   source='debug.c',
+                   deps='replace time-basic close-low-fd talloc socket-blocking',
+-                  local_include=False,
+-                  private_library=True)
++                  local_include=False)
+ 
+ bld.SAMBA_LIBRARY('socket-blocking',
+                   source='blocking.c',

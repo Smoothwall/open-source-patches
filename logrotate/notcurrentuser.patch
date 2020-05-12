@@ -1,0 +1,13 @@
+--- a/test/test
++++ b/test/test
+@@ -71,8 +71,8 @@
+ genconfig() {
+     input=test-config.$1.in
+     output=test-config.$1
+-    user=$(id -u -n)
+-    group=$(id -g -n)
++    user=$(id -u nobody -n)
++    group=$(id -g nobody -n)
+     sed "s,&DIR&,$PWD,g" < $input | sed "s,&USER&,$user,g" | sed "s,&GROUP&,$group,g" > $output
+     config_crc=$(md5sum $output)
+ }

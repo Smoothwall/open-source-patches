@@ -1,0 +1,17 @@
+# Only require the LDB version that we released Samba 4.2.9 with
+#
+# The system version will have been patched by debian, and that is the
+# responsiblity of the ldb package to be secure, not Samba to assert that.
+diff --git a/lib/ldb/wscript b/lib/ldb/wscript
+index 18e315b..d5c5c4c 100755
+--- a/lib/ldb/wscript
++++ b/lib/ldb/wscript
+@@ -2,7 +2,7 @@
+ 
+ APPNAME = 'ldb'
+ VERSION = '1.1.20'
+-SYSTEM_VERSION = '1.1.24'
++SYSTEM_VERSION = '1.1.20'
+ 
+ blddir = 'bin'
+ 

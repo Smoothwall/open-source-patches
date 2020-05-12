@@ -1,0 +1,27 @@
+From 1fbd56e33d641c08a8f573406cf27f9adf667763 Mon Sep 17 00:00:00 2001
+From: Russell Coker <russell@coker.com.au>
+Date: Tue, 6 Jun 2017 15:00:20 +0100
+Subject: Fix incoming compression statistics
+
+Bug-Debian: https://bugs.debian.org/797964
+Forwarded: https://lists.mindrot.org/pipermail/openssh-unix-dev/2017-June/036077.html
+Last-Update: 2017-06-06
+
+Patch-Name: fix-incoming-compression-statistics.patch
+---
+ packet.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packet.c b/packet.c
+index ad1f6b49..afcde6f3 100644
+--- a/packet.c
++++ b/packet.c
+@@ -587,7 +587,7 @@ ssh_packet_close(struct ssh *ssh)
+ 				deflateEnd(stream);
+ 		}
+ 		if (state->compression_in_started) {
+-			z_streamp stream = &state->compression_out_stream;
++			z_streamp stream = &state->compression_in_stream;
+ 			debug("compress incoming: "
+ 			    "raw data %llu, compressed %llu, factor %.2f",
+ 			    (unsigned long long)stream->total_out,

@@ -1,0 +1,11 @@
+--- a/rsync.1
++++ b/rsync.1
+@@ -2916,7 +2916,7 @@
+ .RS 
+ \f(CWmerge /etc/rsync/default.rules\fP
+ .br 
+-\f(CW. /etc/rsync/default.rules\fP
++\f(CW\&. /etc/rsync/default.rules\fP
+ .br 
+ \f(CWdir\-merge .per\-dir\-filter\fP
+ .br 

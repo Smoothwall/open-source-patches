@@ -1,0 +1,34 @@
+Author: Rebecca Gellman <rebecca.gellman@smoothwall.net>
+Description:
+ Only wait for one DC to respond in cldap_multi_netlogon().
+ Parallelized requests to DCs wait for a minimum of 3 DCs to
+ respond (or timeout) before deciding what to do next. But if only
+ one responds, the system carries on working anyway.
+ 
+ Instead of insisting at least 3 replies come back, only insist on
+ at least 1 reply. If we get more, great. If not, no biggie.
+ 
+ We also increased the max parallel queries from 3 to 15. This is
+ to prevent the same problem ocurring at "the other end" so to speak,
+ i.e. a long delay occurring because the first 3 DCs are all down,
+ but DC number 4 was running fine, we just didn't get to it yet.
+ 
+ Having an upper limit on parallelization is intended to prevent
+ a massive amount of network traffic, however our customer networks
+ can probably handle a few extra UDP probes going on.
+--- a/source3/libads/kerberos.c
++++ b/source3/libads/kerberos.c
+@@ -753,11 +753,12 @@
+ 
+ 	dc_addrs3 = (const struct tsocket_address * const *)dc_addrs2;
+ 
++	// Query 3 at a time, but only wait for 1.
+ 	status = cldap_multi_netlogon(talloc_tos(),
+ 			dc_addrs3, num_dcs,
+ 			realm, lp_netbios_name(),
+ 			NETLOGON_NT_VERSION_5 | NETLOGON_NT_VERSION_5EX,
+-			MIN(num_dcs, 3), MIN(num_dcs, 3),
++			MIN(num_dcs, 1), MIN(num_dcs, 15),
+ 			NULL, NULL,
+ 			timeval_current_ofs(3, 0), &responses);
+ 	TALLOC_FREE(dc_addrs2);

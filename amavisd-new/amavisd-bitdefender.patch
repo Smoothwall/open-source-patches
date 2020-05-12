@@ -1,0 +1,16 @@
+From: Maintenance <maintenance@smoothwall.net>
+Description: Unlike Vipre, Bitdefender will not close the socket after giving a
+ result, since you can do multiple scans on the same socket. So the idea is to
+ jump out the loop after getting a result from the client end.
+--- a/amavisd
++++ b/amavisd
+@@ -23109,6 +23110,9 @@
+             last;   # sysread returns 0 at eof
+           } else {  # successful read
+             $output .= $buff  if length($output) < 100000;  # sanity
++            if ($buff =~ /\n/) {
++              last;
++            }
+           }
+         }
+         $sock->close  or die "Error closing socket $socketname\n";

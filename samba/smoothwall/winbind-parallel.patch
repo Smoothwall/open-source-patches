@@ -1,0 +1,666 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Attempt to connect in parallel wherever we don't know which
+ DC is best to connect to.
+ .
+ Take advantage of the cldap_multi_netlogon API which connects to any
+ number of destinations, and returns when a minimum number of replies
+ are received. Extend this API to allow sending all requests in parallel
+ but only waiting for the first (fastest) response; and allow the caller
+ to provide a filter function to determine which responses should
+ terminate the search early, when the fastest server may not be suitable.
+ .
+ Remove a special case which resolves a DC via our domain controller;
+ use DNS instead so we can choose the fastest one ourselves.
+ .
+ Note that if we bump to a later upstream version, some API calls used
+ by this patch are different; for example, saf_fetch takes a talloc
+ context. Not all differences will stop it compiling, so it will need
+ to be modified carefully.
+---
+Index: samba/source3/libads/cldap.c
+===================================================================
+--- samba.orig/source3/libads/cldap.c	2016-08-26 09:24:52.134697542 +0100
++++ samba/source3/libads/cldap.c	2016-08-26 09:24:52.134697542 +0100
+@@ -34,6 +34,9 @@
+ 	const char *hostname;
+ 	unsigned ntversion;
+ 	int min_servers;
++	int parallel_servers;
++	bool (*filter)(void *, struct netlogon_samlogon_response *);
++	void *filter_data;
+ 
+ 	struct cldap_socket **cldap;
+ 	struct tevent_req **subreqs;
+@@ -58,7 +61,9 @@
+ 	TALLOC_CTX *mem_ctx, struct tevent_context *ev,
+ 	const struct tsocket_address * const *servers, int num_servers,
+ 	const char *domain, const char *hostname, unsigned ntversion,
+-	int min_servers)
++	int min_servers, int parallel_servers,
++	bool (*filter)(void *, struct netlogon_samlogon_response *),
++	void *filter_data)
+ {
+ 	struct tevent_req *req, *subreq;
+ 	struct cldap_multi_netlogon_state *state;
+@@ -76,11 +81,18 @@
+ 	state->hostname = hostname;
+ 	state->ntversion = ntversion;
+ 	state->min_servers = min_servers;
++	state->parallel_servers = parallel_servers;
++	state->filter = filter;
++	state->filter_data = filter_data;
+ 
+ 	if (min_servers > num_servers) {
+ 		tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
+ 		return tevent_req_post(req, ev);
+ 	}
++	if (parallel_servers > num_servers) {
++		tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
++		return tevent_req_post(req, ev);
++	}
+ 
+ 	state->subreqs = talloc_zero_array(state,
+ 					   struct tevent_req *,
+@@ -133,7 +145,7 @@
+ 		state->ios[i].in.map_response	= false;
+ 	}
+ 
+-	for (i=0; i<min_servers; i++) {
++	for (i=0; i<parallel_servers; i++) {
+ 		state->subreqs[i] = cldap_netlogon_send(state->subreqs,
+ 							state->ev,
+ 							state->cldap[i],
+@@ -144,7 +156,7 @@
+ 		tevent_req_set_callback(
+ 			state->subreqs[i], cldap_multi_netlogon_done, req);
+ 	}
+-	state->num_sent = min_servers;
++	state->num_sent = parallel_servers;
+ 
+ 	if (state->num_sent < state->num_servers) {
+ 		/*
+@@ -198,9 +210,12 @@
+ 
+ 	if (NT_STATUS_IS_OK(status)) {
+ 		*response = state->ios[i].out.netlogon;
+-		state->responses[i] = talloc_move(state->responses,
+-						  &response);
+-		state->num_good_received += 1;
++		if ((state->filter == NULL)
++			|| state->filter(state->filter_data, response)) {
++			state->responses[i] = talloc_move(state->responses,
++							  &response);
++			state->num_good_received += 1;
++		}
+ 	}
+ 
+ 	if ((state->num_received == state->num_servers) ||
+@@ -274,8 +289,10 @@
+ 	const struct tsocket_address * const *servers,
+ 	int num_servers,
+ 	const char *domain, const char *hostname, unsigned ntversion,
+-	int min_servers, struct timeval timeout,
+-	struct netlogon_samlogon_response ***responses)
++	int min_servers, int parallel_servers,
++	bool (*filter)(void *, struct netlogon_samlogon_response *),
++	void *filter_data,
++	struct timeval timeout,	struct netlogon_samlogon_response ***responses)
+ {
+ 	struct tevent_context *ev;
+ 	struct tevent_req *req;
+@@ -287,7 +304,7 @@
+ 	}
+ 	req = cldap_multi_netlogon_send(
+ 		ev, ev, servers, num_servers, domain, hostname, ntversion,
+-		min_servers);
++		min_servers, parallel_servers, filter, filter_data);
+ 	if (req == NULL) {
+ 		goto fail;
+ 	}
+@@ -309,50 +326,100 @@
+ 
+ bool ads_cldap_netlogon(TALLOC_CTX *mem_ctx,
+ 			struct sockaddr_storage *ss,
++			int num_servers,
+ 			const char *realm,
+ 			uint32_t nt_version,
++			bool (*filter)(void *, struct netlogon_samlogon_response *),
++			void *filter_data,
++			struct sockaddr_storage **_reply_from,
+ 			struct netlogon_samlogon_response **_reply)
+ {
++	TALLOC_CTX *frame = talloc_stackframe();
+ 	NTSTATUS status;
+-	char addrstr[INET6_ADDRSTRLEN];
+-	const char *dest_str;
+-	struct tsocket_address *dest_addr;
+-	const struct tsocket_address * const *dest_addrs;
++	struct tsocket_address **dest_addrs;
++	const struct tsocket_address * const *dest_addrs2 = NULL;
++	struct sockaddr_storage **reply_addrs;
+ 	struct netlogon_samlogon_response **responses = NULL;
+ 	int ret;
++	int i;
++	int valid_servers = 0;
+ 
+-	dest_str = print_sockaddr(addrstr, sizeof(addrstr), ss);
++	if (frame == NULL) {
++		DEBUG(2, ("ads_cldap_netlogon: talloc "
++			  "failed: %s\n", nt_errstr(NT_STATUS_NO_MEMORY)));
++		return false;
++	}
+ 
+-	ret = tsocket_address_inet_from_strings(mem_ctx, "ip",
+-						dest_str, LDAP_PORT,
+-						&dest_addr);
+-	if (ret != 0) {
+-		status = map_nt_error_from_unix(errno);
+-		DEBUG(2,("Failed to create cldap tsocket_address for %s - %s\n",
+-			 dest_str, nt_errstr(status)));
++	dest_addrs = talloc_zero_array(frame, struct tsocket_address *,
++		num_servers);
++	if (dest_addrs == NULL) {
++		DEBUG(2, ("ads_cldap_netlogon: talloc "
++			  "failed: %s\n", nt_errstr(NT_STATUS_NO_MEMORY)));
++		TALLOC_FREE(frame);
++		return false;
++	}
++	reply_addrs = talloc_zero_array(frame, struct sockaddr_storage *,
++		num_servers);
++	if (dest_addrs == NULL) {
++		DEBUG(2, ("ads_cldap_netlogon: talloc "
++			  "failed: %s\n", nt_errstr(NT_STATUS_NO_MEMORY)));
++		TALLOC_FREE(frame);
+ 		return false;
+ 	}
+ 
+-	dest_addrs = (const struct tsocket_address * const *)&dest_addr;
++	for (i = 0; i < num_servers; i++) {
++		char addrstr[INET6_ADDRSTRLEN];
++		const char *dest_str;
++		struct tsocket_address *dest_addr;
++		dest_str = print_sockaddr(addrstr, sizeof(addrstr), &ss[i]);
++
++		ret = tsocket_address_inet_from_strings(dest_addrs, "ip",
++							dest_str, LDAP_PORT,
++							&dest_addr);
++		if (ret != 0) {
++			status = map_nt_error_from_unix(errno);
++			DEBUG(2,("Failed to create cldap tsocket_address for %s - %s\n",
++				 dest_str, nt_errstr(status)));
++			continue;
++		}
++
++		dest_addrs[valid_servers] = dest_addr;
++		reply_addrs[valid_servers] = &ss[i];
++		valid_servers++;
++	}
+ 
+-	status = cldap_multi_netlogon(talloc_tos(),
+-				dest_addrs, 1,
++	dest_addrs2 = (const struct tsocket_address * const *)dest_addrs;
++
++	status = cldap_multi_netlogon(frame,
++				dest_addrs2, valid_servers,
+ 				realm, NULL,
+-				nt_version, 1,
++				nt_version, 1, valid_servers,
++				filter, filter_data,
+ 				timeval_current_ofs(MAX(3,lp_ldap_timeout()/2), 0),
+ 				&responses);
++	dest_addrs2 = NULL;
+ 	if (!NT_STATUS_IS_OK(status)) {
+ 		DEBUG(2, ("ads_cldap_netlogon: cldap_multi_netlogon "
+ 			  "failed: %s\n", nt_errstr(status)));
++		TALLOC_FREE(frame);
+ 		return false;
+ 	}
+-	if (responses[0] == NULL) {
++	for (i = 0; i < valid_servers; i++) {
++		if (responses[i] != NULL) {
++			break;
++		}
++	}
++	if (i == valid_servers) {
+ 		DEBUG(2, ("ads_cldap_netlogon: did not get a reply\n"));
+ 		TALLOC_FREE(responses);
++		TALLOC_FREE(frame);
+ 		return false;
+ 	}
+-	*_reply = talloc_move(mem_ctx, &responses[0]);
+-
++	if (_reply_from != NULL) {
++		*_reply_from = reply_addrs[i];
++	}
++	*_reply = talloc_move(mem_ctx, &responses[i]);
++	TALLOC_FREE(frame);
+ 	return true;
+ }
+ 
+@@ -369,7 +436,10 @@
+ 	struct netlogon_samlogon_response *reply = NULL;
+ 	bool ret;
+ 
+-	ret = ads_cldap_netlogon(mem_ctx, ss, realm, nt_version, &reply);
++	/* No great need to use filter/filter_data here as we only have
++	 * 1 address */
++	ret = ads_cldap_netlogon(mem_ctx, ss, 1, realm, nt_version,
++		NULL, NULL, NULL, &reply);
+ 	if (!ret) {
+ 		return false;
+ 	}
+Index: samba/source3/libads/cldap.h
+===================================================================
+--- samba.orig/source3/libads/cldap.h	2016-08-26 09:24:52.134697542 +0100
++++ samba/source3/libads/cldap.h	2016-08-26 09:24:52.134697542 +0100
+@@ -32,7 +32,9 @@
+ 	const struct tsocket_address * const *servers,
+ 	int num_servers,
+ 	const char *domain, const char *hostname, unsigned ntversion,
+-	int min_servers);
++	int min_servers, int parallel_servers,
++	bool (*filter)(void *data, struct netlogon_samlogon_response *),
++	void *filter_data);
+ NTSTATUS cldap_multi_netlogon_recv(
+ 	struct tevent_req *req, TALLOC_CTX *mem_ctx,
+ 	struct netlogon_samlogon_response ***responses);
+@@ -41,14 +43,21 @@
+ 	const struct tsocket_address * const *servers,
+ 	int num_servers,
+ 	const char *domain, const char *hostname, unsigned ntversion,
+-	int min_servers, struct timeval timeout,
++	int min_servers, int parallel_servers,
++	bool (*filter)(void *data, struct netlogon_samlogon_response *),
++	void *filter_data,
++	struct timeval timeout,
+ 	struct netlogon_samlogon_response ***responses);
+ 
+ bool ads_cldap_netlogon(TALLOC_CTX *mem_ctx,
+ 			struct sockaddr_storage *ss,
++			int num_servers,
+ 			const char *realm,
+ 			uint32_t nt_version,
+-			struct netlogon_samlogon_response **reply);
++			bool (*filter)(void *, struct netlogon_samlogon_response *),
++			void *filter_data,
++			struct sockaddr_storage **_reply_from,
++			struct netlogon_samlogon_response **_reply);
+ bool ads_cldap_netlogon_5(TALLOC_CTX *mem_ctx,
+ 			  struct sockaddr_storage *ss,
+ 			  const char *realm,
+Index: samba/source3/libads/kerberos.c
+===================================================================
+--- samba.orig/source3/libads/kerberos.c	2016-08-26 09:24:52.134697542 +0100
++++ samba/source3/libads/kerberos.c	2016-08-26 09:24:52.134697542 +0100
+@@ -757,7 +757,9 @@
+ 			dc_addrs3, num_dcs,
+ 			realm, lp_netbios_name(),
+ 			NETLOGON_NT_VERSION_5 | NETLOGON_NT_VERSION_5EX,
+-			MIN(num_dcs, 3), timeval_current_ofs(3, 0), &responses);
++			MIN(num_dcs, 3), MIN(num_dcs, 3),
++			NULL, NULL,
++			timeval_current_ofs(3, 0), &responses);
+ 	TALLOC_FREE(dc_addrs2);
+ 	dc_addrs3 = NULL;
+ 
+Index: samba/source3/libads/ldap.c
+===================================================================
+--- samba.orig/source3/libads/ldap.c	2016-08-26 09:24:52.134697542 +0100
++++ samba/source3/libads/ldap.c	2016-08-26 09:24:54.000000000 +0100
+@@ -24,6 +24,7 @@
+ #include "includes.h"
+ #include "ads.h"
+ #include "libads/sitename_cache.h"
++#include "../lib/tsocket/tsocket.h"
+ #include "libads/cldap.h"
+ #include "../lib/addns/dnsquery.h"
+ #include "../libds/common/flags.h"
+@@ -230,44 +231,64 @@
+ }
+ 
+ 
++/* filter function for ads_try_connect */
++static bool ads_try_connect_filter(
++	void *data, struct netlogon_samlogon_response *reply)
++{
++	char *upper;
++	if (reply->ntver != NETLOGON_NT_VERSION_5EX) {
++		DEBUG(0,("ads_try_connect_filter: nt_version mismatch: 0x%08x\n",
++			reply->ntver));
++		return false;
++	}
++
++	if ( !(reply->data.nt5_ex.server_type & NBT_SERVER_LDAP) ) {
++		return false;
++	}
++
++	/* Encoding conversion error */
++	upper = SMB_STRDUP(reply->data.nt5_ex.dns_domain);
++	if (!strupper_m(upper)) {
++		free(upper);
++		return false;
++	}
++	free(upper);
++
++	return true;
++}
++
+ /*
+-  try a connection to a given ldap server, returning True and setting the servers IP
+-  in the ads struct if successful
++  try a connection to any of the given ldap servers, returning True and
++  setting the servers IP in the ads struct if successful
+  */
+ static bool ads_try_connect(ADS_STRUCT *ads, bool gc,
+-			    struct sockaddr_storage *ss)
++			    struct sockaddr_storage *ss, int num_servers)
+ {
++	struct sockaddr_storage *reply_from;
++	struct netlogon_samlogon_response *reply;
+ 	struct NETLOGON_SAM_LOGON_RESPONSE_EX cldap_reply;
+ 	TALLOC_CTX *frame = talloc_stackframe();
+ 	bool ret = false;
+-	char addr[INET6_ADDRSTRLEN];
+ 
+-	if (ss == NULL) {
++	if (ss == NULL || num_servers == 0) {
+ 		TALLOC_FREE(frame);
+ 		return False;
+ 	}
+ 
+-	print_sockaddr(addr, sizeof(addr), ss);
+-
+-	DEBUG(5,("ads_try_connect: sending CLDAP request to %s (realm: %s)\n", 
+-		addr, ads->server.realm));
++	DEBUG(5,("ads_try_connect: sending CLDAP request to %d servers (realm: %s)\n",
++		num_servers, ads->server.realm));
+ 
+ 	ZERO_STRUCT( cldap_reply );
+ 
+-	if ( !ads_cldap_netlogon_5(frame, ss, ads->server.realm, &cldap_reply ) ) {
+-		DEBUG(3,("ads_try_connect: CLDAP request %s failed.\n", addr));
+-		ret = false;
+-		goto out;
+-	}
+-
+-	/* Check the CLDAP reply flags */
+-
+-	if ( !(cldap_reply.server_type & NBT_SERVER_LDAP) ) {
+-		DEBUG(1,("ads_try_connect: %s's CLDAP reply says it is not an LDAP server!\n",
+-			addr));
++	if ( !ads_cldap_netlogon(frame, ss, num_servers, ads->server.realm,
++		NETLOGON_NT_VERSION_5 | NETLOGON_NT_VERSION_5EX,
++		ads_try_connect_filter, NULL,
++		&reply_from, &reply ) ) {
++		DEBUG(3,("ads_try_connect: CLDAP request failed.\n"));
+ 		ret = false;
+ 		goto out;
+ 	}
++	cldap_reply = reply->data.nt5_ex;
+ 
+ 	/* Fill in the ads->config values */
+ 
+@@ -298,7 +319,7 @@
+ 	ads->server.workgroup          = SMB_STRDUP(cldap_reply.domain_name);
+ 
+ 	ads->ldap.port = gc ? LDAP_GC_PORT : LDAP_PORT;
+-	ads->ldap.ss = *ss;
++	ads->ldap.ss = *reply_from;
+ 
+ 	/* Store our site name. */
+ 	sitename_store( cldap_reply.domain_name, cldap_reply.client_site);
+@@ -323,26 +344,54 @@
+ {
+ 	int i;
+ 	bool ok;
++	struct sockaddr_storage *servers;
++	char (*names)[INET6_ADDRSTRLEN];
++	TALLOC_CTX *frame = talloc_stackframe();
++	int num_servers = 0;
+ 
+-	for (i = 0; i < count; i++) {
+-		char server[INET6_ADDRSTRLEN];
++	if (frame == NULL) {
++		return NT_STATUS_NO_MEMORY;
++	}
++	servers = talloc_zero_array(frame, struct sockaddr_storage, count);
++	if (servers == NULL) {
++		talloc_free(frame);
++		return NT_STATUS_NO_MEMORY;
++	}
++	/* talloc_zero_array gets confused about this unusual type */
++	names = talloc_zero_size(frame, INET6_ADDRSTRLEN * count);
++	if (names == NULL) {
++		talloc_free(frame);
++		return NT_STATUS_NO_MEMORY;
++	}
+ 
+-		print_sockaddr(server, sizeof(server), &ip_list[i].ss);
++	for (i = 0; i < count; i++) {
++		print_sockaddr(names[num_servers], sizeof(*names), &ip_list[i].ss);
+ 
+ 		if (!NT_STATUS_IS_OK(
+-			check_negative_conn_cache(domain, server)))
++			check_negative_conn_cache(domain, names[num_servers])))
+ 			continue;
+ 
+-		ok = ads_try_connect(ads, false, &ip_list[i].ss);
+-		if (ok) {
+-			return NT_STATUS_OK;
+-		}
++		servers[num_servers] = ip_list[i].ss;
++		num_servers++;
++	}
++
++	if (num_servers == 0) {
++		talloc_free(frame);
++		return NT_STATUS_NO_LOGON_SERVERS;
++	}
+ 
+-		/* keep track of failures */
+-		add_failed_connection_entry(domain, server,
+-					    NT_STATUS_UNSUCCESSFUL);
++	ok = ads_try_connect(ads, false, servers, num_servers);
++	if (ok) {
++		talloc_free(frame);
++		return NT_STATUS_OK;
+ 	}
+ 
++	/* keep track of failures */
++	for (i = 0; i < num_servers; i++) {
++		add_failed_connection_entry(domain, names[i], NT_STATUS_UNSUCCESSFUL);
++	}
++
++	talloc_free(frame);
+ 	return NT_STATUS_NO_LOGON_SERVERS;
+ }
+ 
+@@ -490,7 +539,7 @@
+ 			 * we call ads_try_connect() to fill in the
+ 			 * ads->config details
+ 			 */
+-			ok = ads_try_connect(ads, false, &ip_out);
++			ok = ads_try_connect(ads, false, &ip_out, 1);
+ 			if (ok) {
+ 				return NT_STATUS_OK;
+ 			}
+@@ -557,6 +606,7 @@
+ 	ADS_STATUS status;
+ 	NTSTATUS ntstatus;
+ 	char addr[INET6_ADDRSTRLEN];
++	char *saf_servername;
+ 
+ 	ZERO_STRUCT(ads->ldap);
+ 	ads->ldap.last_attempt	= time_mono(NULL);
+@@ -582,7 +632,7 @@
+ 			status = ADS_ERROR_NT(NT_STATUS_NOT_FOUND);
+ 			goto out;
+ 		}
+-		ok = ads_try_connect(ads, ads->server.gc, &ss);
++		ok = ads_try_connect(ads, ads->server.gc, &ss, 1);
+ 		if (ok) {
+ 			goto got_connection;
+ 		}
+@@ -597,6 +647,33 @@
+ 		}
+ 	}
+ 
++	/* No server name was provided, but maybe the saf cache can give
++	 * a hint- but ignore it if the server is in the negative
++	 * connection cache.
++	 */
++	saf_servername = saf_fetch(talloc_tos(), ads->server.realm);
++	if (saf_servername && NT_STATUS_IS_OK(check_negative_conn_cache(
++		ads->server.realm, saf_servername)))
++	{
++		bool ok = false;
++		struct sockaddr_storage ss;
++
++		ok = resolve_name(saf_servername, &ss, 0x20, true);
++		if (!ok) {
++			DEBUG(5,("ads_connect: unable to resolve name %s\n",
++				 saf_servername));
++			TALLOC_FREE(saf_servername);
++			status = ADS_ERROR_NT(NT_STATUS_NOT_FOUND);
++			goto out;
++		}
++		TALLOC_FREE(saf_servername);
++		ok = ads_try_connect(ads, false, &ss, 1);
++		if (ok) {
++			goto got_connection;
++		}
++	}
++	TALLOC_FREE(saf_servername);
++
+ 	ntstatus = ads_find_dc(ads);
+ 	if (NT_STATUS_IS_OK(ntstatus)) {
+ 		goto got_connection;
+Index: samba/source3/libsmb/dsgetdcname.c
+===================================================================
+--- samba.orig/source3/libsmb/dsgetdcname.c	2016-08-26 09:24:52.134697542 +0100
++++ samba/source3/libsmb/dsgetdcname.c	2016-08-26 09:24:52.134697542 +0100
+@@ -23,6 +23,7 @@
+ #include "includes.h"
+ #include "libads/sitename_cache.h"
+ #include "../librpc/gen_ndr/ndr_netlogon.h"
++#include "../lib/tsocket/tsocket.h"
+ #include "libads/cldap.h"
+ #include "../lib/addns/dnsquery.h"
+ #include "libsmb/clidgram.h"
+@@ -857,6 +858,23 @@
+ /****************************************************************
+ ****************************************************************/
+ 
++static bool process_dc_dns_filter(
++	void *data, struct netlogon_samlogon_response *r)
++{
++	uint32_t nt_version;
++	uint32_t flags = *((uint32_t *)data);
++	uint32_t ret_flags;
++
++	nt_version = r->ntver;
++	ret_flags = get_cldap_reply_server_flags(r, nt_version);
++
++	if (check_cldap_reply_required_flags(ret_flags, flags)) {
++		return true;
++	}
++
++	return false;
++}
++
+ static NTSTATUS process_dc_dns(TALLOC_CTX *mem_ctx,
+ 			       const char *domain_name,
+ 			       uint32_t flags,
+@@ -865,47 +883,42 @@
+ 			       struct netr_DsRGetDCNameInfo **info)
+ {
+ 	int i = 0;
+-	bool valid_dc = false;
+ 	struct netlogon_samlogon_response *r = NULL;
+ 	uint32_t nt_version = NETLOGON_NT_VERSION_5 |
+ 			      NETLOGON_NT_VERSION_5EX;
+-	uint32_t ret_flags = 0;
+ 	NTSTATUS status;
++	struct sockaddr_storage *servers;
++	struct sockaddr_storage *reply_from;
+ 
+ 	nt_version |= map_ds_flags_to_nt_version(flags);
+ 
++	servers = talloc_zero_array(mem_ctx, struct sockaddr_storage, num_dcs);
++	if (servers == NULL) {
++		return NT_STATUS_NO_MEMORY;
++	}
++
+ 	for (i=0; i<num_dcs; i++) {
+ 
+ 		char addr[INET6_ADDRSTRLEN];
+ 		print_sockaddr(addr, sizeof(addr), &dclist[i].ss);
+ 
+ 		DEBUG(10,("LDAP ping to %s (%s)\n", dclist[i].hostname, addr));
+-
+-		if (ads_cldap_netlogon(mem_ctx, &dclist[i].ss,
+-					domain_name,
+-					nt_version,
+-					&r))
+-		{
+-			nt_version = r->ntver;
+-			ret_flags = get_cldap_reply_server_flags(r, nt_version);
+-
+-			if (check_cldap_reply_required_flags(ret_flags, flags)) {
+-				valid_dc = true;
+-				break;
+-			}
+-		}
+-
+-		continue;
++		servers[i] = dclist[i].ss;
+ 	}
+ 
+-	if (!valid_dc) {
++	if (!ads_cldap_netlogon(mem_ctx, servers, num_dcs,
++				domain_name,
++				nt_version,
++				process_dc_dns_filter, &flags,
++				&reply_from, &r))
++	{
+ 		return NT_STATUS_DOMAIN_CONTROLLER_NOT_FOUND;
+ 	}
+ 
+-	status = make_dc_info_from_cldap_reply(mem_ctx, flags, &dclist[i].ss,
++	status = make_dc_info_from_cldap_reply(mem_ctx, flags, reply_from,
+ 					       &r->data.nt5_ex, info);
+ 	if (NT_STATUS_IS_OK(status)) {
+-		return store_cldap_reply(mem_ctx, flags, &dclist[i].ss,
++		return store_cldap_reply(mem_ctx, flags, reply_from,
+ 					 nt_version, &r->data.nt5_ex);
+ 	}
+ 
+Index: samba/source3/winbindd/winbindd_cm.c
+===================================================================
+--- samba.orig/source3/winbindd/winbindd_cm.c	2016-08-26 09:24:54.000000000 +0100
++++ samba/source3/winbindd/winbindd_cm.c	2016-08-26 09:26:08.727436966 +0100
+@@ -1338,24 +1338,8 @@
+ 	struct  ip_service *ip_list = NULL;
+ 	int     iplist_size = 0;
+ 	int     i;
+-	bool    is_our_domain;
+ 	enum security_types sec = (enum security_types)lp_security();
+ 
+-	is_our_domain = strequal(domain->name, lp_workgroup());
+-
+-	/* If not our domain, get the preferred DC, by asking our primary DC */
+-	if ( !is_our_domain
+-		&& get_dc_name_via_netlogon(domain, dcname, &ss)
+-		&& add_one_dc_unique(mem_ctx, domain->name, dcname, &ss, dcs,
+-		       num_dcs) )
+-	{
+-		char addr[INET6_ADDRSTRLEN];
+-		print_sockaddr(addr, sizeof(addr), &ss);
+-		DEBUG(10, ("Retrieved DC %s at %s via netlogon\n",
+-			   dcname, addr));
+-		return True;
+-	}
+-
+ 	if ((sec == SEC_ADS) && (domain->alt_name != NULL)) {
+ 		char *sitename = NULL;
+ 

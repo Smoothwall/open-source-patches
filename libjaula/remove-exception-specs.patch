@@ -1,0 +1,311 @@
+Author: Stephen Lynch <stephen.lynch@smoothwall.net>
+Description: Remove exception specifications
+ Causes exceptions (e.g. std::bad_alloc()) to propagate, rather than to cause
+ abort() calls.
+diff --git a/jaula/jaula_parse.cc b/jaula/jaula_parse.cc
+index 5fbc1bd..e12854c 100644
+--- a/jaula/jaula_parse.cc
++++ b/jaula/jaula_parse.cc
+@@ -71,7 +71,7 @@ namespace JAULA
+ 
+   Value_Complex *Parser::parseStream(std::istream &inpStream
+     , bool comments_allowed
+-    , bool full_read) throw(Exception)
++    , bool full_read)
+   {
+     try
+     {
+@@ -115,7 +115,6 @@ namespace JAULA
+     {}
+ 
+   Value *Parser::Value_Parser::parseValue(Lexan &lexan, unsigned int token)
+-    throw(Exception)
+   {
+     try
+     {
+@@ -560,7 +559,6 @@ namespace JAULA
+   }
+ 
+   void Parser::Value_Parser::EOFError(Lexan &lexan, Syntax_Error const &ex)
+-    throw(Exception)
+   {
+     try
+     {
+diff --git a/jaula/jaula_parse.h b/jaula/jaula_parse.h
+index f030fdd..74315a3 100644
+--- a/jaula/jaula_parse.h
++++ b/jaula/jaula_parse.h
+@@ -109,7 +109,7 @@ namespace JAULA
+       static Value_Complex *parseStream(std::istream &inpStream
+         , bool comments_allowed = false
+         , bool full_read = true
+-        ) throw(Exception);
++        );
+ 
+     private:
+ 
+@@ -164,8 +164,7 @@ namespace JAULA
+            * syntax or lexical error is found. Upon execution input stream is
+            * positioned so that a new token or EOF can be read from the input.
+            */
+-          static Value *parseValue(Lexan &lexan, unsigned int token)
+-            throw(Exception);
++          static Value *parseValue(Lexan &lexan, unsigned int token);
+ 
+         private:
+ 
+@@ -236,8 +235,7 @@ namespace JAULA
+            * to send the Lexan::LexerError Exception or the one received in
+            * the input parameter based on this.
+            */
+-          static void EOFError(Lexan &lexan, Syntax_Error const &ex)
+-            throw(Exception);
++          static void EOFError(Lexan &lexan, Syntax_Error const &ex);
+       };                         // class Value_Parser
+ 
+   };                             // class Parser
+diff --git a/jaula/jaula_value.cc b/jaula/jaula_value.cc
+index d1e7431..1570f96 100644
+--- a/jaula/jaula_value.cc
++++ b/jaula/jaula_value.cc
+@@ -58,7 +58,7 @@ namespace JAULA
+     return Type_;
+   }
+ 
+-  void Value::set(Value const &origin) throw(Bad_Data_Type)
++  void Value::set(Value const &origin)
+   {
+     if (Type_ != origin.getType())
+       throw Bad_Data_Type("Origin and destination value types do not match"
+@@ -66,7 +66,7 @@ namespace JAULA
+         , "Value::set(Value const &)");
+   }
+ 
+-  Value &Value::operator=(Value const &orig) throw(Bad_Data_Type)
++  Value &Value::operator=(Value const &orig)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value.h b/jaula/jaula_value.h
+index 4b12404..193fbcb 100644
+--- a/jaula/jaula_value.h
++++ b/jaula/jaula_value.h
+@@ -107,7 +107,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+       /**
+        * \brief Assignment operator
+@@ -127,7 +127,7 @@ namespace JAULA
+        * This method controls if destination and origin instances are the same
+        * so there is no trouble in a = a asignments.
+        */
+-      Value &operator=(Value const &orig) throw(Bad_Data_Type);
++      Value &operator=(Value const &orig);
+ 
+       /**
+        * \brief Creates a duplicate of a value
+diff --git a/jaula/jaula_value_array.cc b/jaula/jaula_value_array.cc
+index eff9a99..d9f521a 100644
+--- a/jaula/jaula_value_array.cc
++++ b/jaula/jaula_value_array.cc
+@@ -94,7 +94,7 @@ namespace JAULA
+       data_.push_back(duplicate(*(*it)));
+   }
+ 
+-  void Value_Array::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Array::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_array.h b/jaula/jaula_value_array.h
+index 4d34ea3..afcc3a8 100644
+--- a/jaula/jaula_value_array.h
++++ b/jaula/jaula_value_array.h
+@@ -148,7 +148,7 @@ namespace JAULA
+        * The destination array is destroyed during the asignment process so,
+        * any references to it or to its former elements will be void.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+       /**
+        * \brief Appends one item to the array
+diff --git a/jaula/jaula_value_boolean.cc b/jaula/jaula_value_boolean.cc
+index f7d22d9..59d562d 100644
+--- a/jaula/jaula_value_boolean.cc
++++ b/jaula/jaula_value_boolean.cc
+@@ -65,7 +65,7 @@ namespace JAULA
+     data_ = data;
+   }
+ 
+-  void Value_Boolean::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Boolean::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_boolean.h b/jaula/jaula_value_boolean.h
+index a4596ab..7443f4b 100644
+--- a/jaula/jaula_value_boolean.h
++++ b/jaula/jaula_value_boolean.h
+@@ -95,7 +95,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+     private:
+ 
+diff --git a/jaula/jaula_value_null.cc b/jaula/jaula_value_null.cc
+index 83b2935..df59a59 100644
+--- a/jaula/jaula_value_null.cc
++++ b/jaula/jaula_value_null.cc
+@@ -51,7 +51,7 @@ namespace JAULA
+     ostr << "null";
+   }
+ 
+-  void Value_Null::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Null::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_null.h b/jaula/jaula_value_null.h
+index 7a22fa3..52c9c10 100644
+--- a/jaula/jaula_value_null.h
++++ b/jaula/jaula_value_null.h
+@@ -80,7 +80,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+   };                             // class Value_Null
+ 
+diff --git a/jaula/jaula_value_number.cc b/jaula/jaula_value_number.cc
+index a1b6ff2..87d9488 100644
+--- a/jaula/jaula_value_number.cc
++++ b/jaula/jaula_value_number.cc
+@@ -62,7 +62,7 @@ namespace JAULA
+     data_ = data;
+   }
+ 
+-  void Value_Number::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Number::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_number.h b/jaula/jaula_value_number.h
+index 97064f6..03670b0 100644
+--- a/jaula/jaula_value_number.h
++++ b/jaula/jaula_value_number.h
+@@ -95,7 +95,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+     private:
+ 
+diff --git a/jaula/jaula_value_number_int.cc b/jaula/jaula_value_number_int.cc
+index b088171..7a9ac29 100644
+--- a/jaula/jaula_value_number_int.cc
++++ b/jaula/jaula_value_number_int.cc
+@@ -61,7 +61,7 @@ namespace JAULA
+     data_ = data;
+   }
+ 
+-  void Value_Number_Int::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Number_Int::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_number_int.h b/jaula/jaula_value_number_int.h
+index 5dda91a..e9af31c 100644
+--- a/jaula/jaula_value_number_int.h
++++ b/jaula/jaula_value_number_int.h
+@@ -96,7 +96,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+     private:
+ 
+diff --git a/jaula/jaula_value_object.cc b/jaula/jaula_value_object.cc
+index 46c4057..97cc0ea 100644
+--- a/jaula/jaula_value_object.cc
++++ b/jaula/jaula_value_object.cc
+@@ -93,7 +93,7 @@ namespace JAULA
+       data_.insert(dataType::value_type(it->first, duplicate(*(it->second))));
+   }
+ 
+-  void Value_Object::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_Object::set(Value const &origin)
+   {
+     try
+     {
+@@ -110,7 +110,7 @@ namespace JAULA
+     }
+   }
+ 
+-  void Value_Object::insertItem(std::string const &name, Value const &item) throw(Name_Duplicated)
++  void Value_Object::insertItem(std::string const &name, Value const &item)
+   {
+     std::pair<dataType::iterator, bool> insSt = data_.insert(dataType::value_type(name, duplicate(item)));
+     if (!insSt.second)
+diff --git a/jaula/jaula_value_object.h b/jaula/jaula_value_object.h
+index c6266cc..e34a7fa 100644
+--- a/jaula/jaula_value_object.h
++++ b/jaula/jaula_value_object.h
+@@ -151,7 +151,7 @@ namespace JAULA
+        * The destination object is destroyed during the asignment process so,
+        * any references to it or to its former elements will be void.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+       /**
+        * \brief Inserts one item to the object
+@@ -168,8 +168,7 @@ namespace JAULA
+        * Inserts a deep copy of the item value at the specified name fot the
+        * object.
+        */
+-      void insertItem(std::string const &name, Value const &item)
+-        throw(Name_Duplicated);
++      void insertItem(std::string const &name, Value const &item);
+ 
+       /**
+        * \brief Empties the contents of an instance
+diff --git a/jaula/jaula_value_string.cc b/jaula/jaula_value_string.cc
+index 1f51607..ac7ffc2 100644
+--- a/jaula/jaula_value_string.cc
++++ b/jaula/jaula_value_string.cc
+@@ -71,7 +71,7 @@ namespace JAULA
+     data_ = data;
+   }
+ 
+-  void Value_String::set(Value const &origin) throw(Bad_Data_Type)
++  void Value_String::set(Value const &origin)
+   {
+     try
+     {
+diff --git a/jaula/jaula_value_string.h b/jaula/jaula_value_string.h
+index 529a22a..b397b1a 100644
+--- a/jaula/jaula_value_string.h
++++ b/jaula/jaula_value_string.h
+@@ -95,7 +95,7 @@ namespace JAULA
+        * This exception is launched in case that origin and destination value
+        * types are different.
+        */
+-      virtual void set(Value const &origin) throw(Bad_Data_Type);
++      virtual void set(Value const &origin);
+ 
+       /**
+        * \brief Represents a string in JSON Notation

@@ -1,0 +1,78 @@
+Author: Maintenance <maintenance@smoothwall.net>
+Description: Unicode-handling fixes for fakeauth
+diff -NurbB squid-2.6.STABLE4/helpers/ntlm_auth/fakeauth/fakeauth_auth.c squid-2.6.STABLE4-ntlm-unicode/helpers/ntlm_auth/fakeauth/fakeauth_auth.c
+--- squid-2.6.STABLE4/helpers/ntlm_auth/fakeauth/fakeauth_auth.c	2006-10-11 10:03:09.000000000 +0100
++++ squid-2.6.STABLE4-ntlm-unicode/helpers/ntlm_auth/fakeauth/fakeauth_auth.c	2006-10-11 10:37:47.000000000 +0100
+@@ -21,6 +21,8 @@
+ #include "config.h"
+ #include "squid_types.h"
+ #include "ntlmauth.h"
++#include <iconv.h>
++#include <errno.h>
+ 
+ #include "util.h"
+ #include <ctype.h>
+@@ -211,7 +213,7 @@
+  * Extract a string from an NTLM request and return as ASCII.
+  */
+ char *
+-ntlmGetString(ntlmhdr * hdr, strhdr * str, int flags)
++ntlmGetString(ntlmhdr * hdr, strhdr * str, int32_t flags)
+ {
+     static char buf[512];
+     u_short *s;
+@@ -224,26 +226,25 @@
+     l = SSWAP(str->len);
+     o = WSWAP(str->offset);
+ 
+-    /* Sanity checks. XXX values arbitrarialy chosen */
+-    if (l <= 0 || o <= 0 || l >= 32 || o >= 256) {
++    /* Sanity checks. */
++    if (l <= 0 || o < 0 || (l + o) >= 256*6) {
+ 	fprintf(stderr, "ntlmGetString: insane: l:%d o:%d\n", l, o);
+ 	return (NULL);
+     }
+     if ((flags & NEGOTIATE_ASCII) == 0) {
+ 	/* UNICODE string */
+-	s = (u_short *) ((char *) hdr + o);
++	sc = (char *) hdr + o;
+ 	d = buf;
+-
+-	for (l >>= 1; l; s++, l--) {
+-	    c = SSWAP(*s);
+-	    if (c > 254 || c == '\0') {
+-		fprintf(stderr, "ntlmGetString: bad uni: %04x\n", c);
+-		return (NULL);
+-	    }
+-	    *d++ = c;
+-	}
+-
+-	*d = 0;
++	iconv_t ic = iconv_open("UTF-8", "UTF-16LE");
++	if (ic == (iconv_t)-1) {
++		fprintf(stderr, "ntlmGetString: failed to initialise iconv: %s\n", strerror(errno));
++		return NULL;
++	}
++	int l2 = 512;
++	iconv(ic, &sc, &l, &d, &l2);
++	iconv_close(ic);
++	buf[512 - l2] = '\0';
++	debug("ntlmGetString: unicode %d %s\n", 512 - l2, buf);
+     } else {
+ 	/* ASCII/OEM string */
+ 	sc = (char *) hdr + o;
+@@ -399,11 +400,11 @@
+ 	    debug("Got '%s' from Squid\n", buf);
+ 
+ 	if (strncasecmp(buf, "YR", 2) == 0) {
+-	    if (strlen(buf) > 3) {
++	    //if (strlen(buf) > 3) {
+ 		nego = (struct ntlm_negotiate *) decoded;
+ 		ntlmMakeChallenge(&chal, nego->flags);
+-	    } else
+-		ntlmMakeChallenge(&chal, NEGOTIATE_ASCII);
++	    //} else
++	//	ntlmMakeChallenge(&chal, NEGOTIATE_ASCII);
+ 	    len =
+ 		sizeof(chal) - sizeof(chal.pad) +
+ 		SSWAP(chal.target.maxlen);

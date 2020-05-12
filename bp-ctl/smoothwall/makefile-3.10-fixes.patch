@@ -1,0 +1,13 @@
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+Description: Fixes the makefile for kernel 3.10
+Fixes the makefile as LINUX_VERSION_CODE in kernel 3.10 is defined in different file. 
+--- a/Makefile
++++ b/Makefile
+@@ -81,6 +81,7 @@
+ 
+ # Version file Search Path
+ VSP :=  $(KOBJ)/include/generated/utsrelease.h \
++        $(KOBJ)/include/generated/uapi/linux/version.h \
+         $(KOBJ)/include/linux/utsrelease.h \
+         $(KOBJ)/include/linux/version.h \
+         /boot/vmlinuz.version.h

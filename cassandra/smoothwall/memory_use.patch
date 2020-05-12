@@ -1,0 +1,44 @@
+Description: Change the memory allocation algoritm to something more
+  suitable to our needs. Benchmarking with 10000 records shows no noticable
+  performance change when reducing memory to 100MB and with 100000 records
+  shows a slight fall off going 200MB→100MB.
+  So take 1/10th of system memory which gives 100MB on a 1GB machine.
+  Continue to cap at 8GB for Java reasons.
+  Some useful references:
+  http://docs.datastax.com/en/cassandra/2.2/cassandra/operations/opsTuneJVM.html
+  https://docs.oracle.com/cd/E19900-01/819-4742/abeik/index.html
+  http://docs.oracle.com/javase/7/docs/technotes/guides/vm/gc-ergonomics.html (note AMD64 implies server class).
+  Note also Java uses another c200MB in addition to the heap.
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+--- a/cassandra/etc/cassandra/cassandra-env.sh
++++ b/cassandra/etc/cassandra/cassandra-env.sh
+@@ -50,25 +50,11 @@
+     fi
+ 
+     # set max heap size based on the following
+-    # max(min(1/2 ram, 1024MB), min(1/4 ram, 8GB))
+-    # calculate 1/2 ram and cap to 1024MB
+-    # calculate 1/4 ram and cap to 8192MB
+-    # pick the max
+-    half_system_memory_in_mb=`expr $system_memory_in_mb / 2`
+-    quarter_system_memory_in_mb=`expr $half_system_memory_in_mb / 2`
+-    if [ "$half_system_memory_in_mb" -gt "1024" ]
++    # min(1/10 ram, 8GB)
++    max_heap_size_in_mb=`expr $system_memory_in_mb / 10`
++    if [ "$max_heap_size_in_mb" -gt "8192" ]
+     then
+-        half_system_memory_in_mb="1024"
+-    fi
+-    if [ "$quarter_system_memory_in_mb" -gt "8192" ]
+-    then
+-        quarter_system_memory_in_mb="8192"
+-    fi
+-    if [ "$half_system_memory_in_mb" -gt "$quarter_system_memory_in_mb" ]
+-    then
+-        max_heap_size_in_mb="$half_system_memory_in_mb"
+-    else
+-        max_heap_size_in_mb="$quarter_system_memory_in_mb"
++        max_heap_size_in_mb="8192"
+     fi
+     MAX_HEAP_SIZE="${max_heap_size_in_mb}M"
+ 

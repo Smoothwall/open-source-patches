@@ -1,0 +1,80 @@
+From 904bc482ad87648a2c799c441dc6a8449f24e15a Mon Sep 17 00:00:00 2001
+From: "djm@openbsd.org" <djm@openbsd.org>
+Date: Wed, 4 Jan 2017 05:37:40 +0000
+Subject: upstream commit
+
+unbreak Unix domain socket forwarding for root; ok
+markus@
+
+Upstream-ID: 6649c76eb7a3fa15409373295ca71badf56920a2
+
+Origin: https://anongit.mindrot.org/openssh.git/commit/?id=51045869fa084cdd016fdd721ea760417c0a3bf3
+Bug-Debian: https://bugs.debian.org/858252
+Last-Update: 2017-03-30
+
+Patch-Name: unbreak-unix-forwarding-for-root.patch
+---
+ serverloop.c | 19 ++++++++++++-------
+ 1 file changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/serverloop.c b/serverloop.c
+index c4e4699d..c55d203b 100644
+--- a/serverloop.c
++++ b/serverloop.c
+@@ -468,6 +468,10 @@ server_request_direct_streamlocal(void)
+ 	Channel *c = NULL;
+ 	char *target, *originator;
+ 	u_short originator_port;
++	struct passwd *pw = the_authctxt->pw;
++
++	if (pw == NULL || !the_authctxt->valid)
++		fatal("server_input_global_request: no/invalid user");
+ 
+ 	target = packet_get_string(NULL);
+ 	originator = packet_get_string(NULL);
+@@ -480,7 +484,7 @@ server_request_direct_streamlocal(void)
+ 	/* XXX fine grained permissions */
+ 	if ((options.allow_streamlocal_forwarding & FORWARD_LOCAL) != 0 &&
+ 	    !no_port_forwarding_flag && !options.disable_forwarding &&
+-	    use_privsep) {
++	    (pw->pw_uid == 0 || use_privsep)) {
+ 		c = channel_connect_to_path(target,
+ 		    "direct-streamlocal@openssh.com", "direct-streamlocal");
+ 	} else {
+@@ -702,6 +706,10 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
+ 	int want_reply;
+ 	int r, success = 0, allocated_listen_port = 0;
+ 	struct sshbuf *resp = NULL;
++	struct passwd *pw = the_authctxt->pw;
++
++	if (pw == NULL || !the_authctxt->valid)
++		fatal("server_input_global_request: no/invalid user");
+ 
+ 	rtype = packet_get_string(NULL);
+ 	want_reply = packet_get_char();
+@@ -709,12 +717,8 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
+ 
+ 	/* -R style forwarding */
+ 	if (strcmp(rtype, "tcpip-forward") == 0) {
+-		struct passwd *pw;
+ 		struct Forward fwd;
+ 
+-		pw = the_authctxt->pw;
+-		if (pw == NULL || !the_authctxt->valid)
+-			fatal("server_input_global_request: no/invalid user");
+ 		memset(&fwd, 0, sizeof(fwd));
+ 		fwd.listen_host = packet_get_string(NULL);
+ 		fwd.listen_port = (u_short)packet_get_int();
+@@ -762,9 +766,10 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
+ 		/* check permissions */
+ 		if ((options.allow_streamlocal_forwarding & FORWARD_REMOTE) == 0
+ 		    || no_port_forwarding_flag || options.disable_forwarding ||
+-		    !use_privsep) {
++		    (pw->pw_uid != 0 && !use_privsep)) {
+ 			success = 0;
+-			packet_send_debug("Server has disabled port forwarding.");
++			packet_send_debug("Server has disabled "
++			    "streamlocal forwarding.");
+ 		} else {
+ 			/* Start listening on the socket */
+ 			success = channel_setup_remote_fwd_listener(

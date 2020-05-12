@@ -1,0 +1,35 @@
+Description: Make compression module optional.
+ Cassandra does not enforce on using the Snappy or LZ4 compression
+ methods so DBD::Cassandra should not enforce these modules to be
+ available.
+ The compression modules are now required when they asked for.
+Author: Martin Pritchard <martin.pritchard@smoothwall.net>
+---
+--- a/lib/DBD/Cassandra/Connection.pm
++++ b/lib/DBD/Cassandra/Connection.pm
+@@ -7,8 +7,6 @@
+ use Socket qw/TCP_NODELAY IPPROTO_TCP SOL_SOCKET SO_KEEPALIVE/;
+ use DBD::Cassandra::Protocol qw/:all/;
+ 
+-use Compress::Snappy qw();
+-use Compress::LZ4 qw();
+ use Authen::SASL qw();
+ 
+ use constant STREAM_ID_LIMIT => 32768;
+@@ -48,8 +46,14 @@
+         my $compression= $args->{compression};
+         my %compression_supported= map { $_ => 1 } @{$supported->{COMPRESSION}};
+         if (!$compression) {
+-            $compression= 'lz4' if $compression_supported{lz4};
+-            $compression= 'snappy' if $compression_supported{snappy};
++            if ($compression_supported{lz4}) {
++                require Compress::LZ4;
++                $compression= 'lz4';
++            }
++            if ($compression_supported{snappy}) {
++                require Compress::Snappy;
++                $compression= 'snappy';
++            }
+         }
+         $compression= '' if $compression && $compression eq 'none';
+ 

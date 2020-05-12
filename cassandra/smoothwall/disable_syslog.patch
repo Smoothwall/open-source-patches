@@ -1,0 +1,54 @@
+Author: Vytas Dauksa <vytas.dauksa@smoothwall.net>
+Description: Don't log to syslog
+ Logback's ch.qos.logback.classic.net.SyslogAppender was
+ found to open *:<random UDP port>.
+ 
+ There doesn't seem to be an easy way to limit it to
+ localhost. Hence disabling syslog and re-enabling
+ /var/log/cassandra/system.log for now.
+--- a/cassandra/etc/cassandra/logback.xml
++++ b/cassandra/etc/cassandra/logback.xml
+@@ -68,16 +68,17 @@
+   </appender>
+ 
+   <!-- SYSLOG appender to local syslog daemon on UDP port 514 -->
+-
++<!--
+   <appender name="SYSLOG" class="ch.qos.logback.classic.net.SyslogAppender">
+     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+       <level>INFO</level>
+     </filter>
+-
++-->
+     <!-- Cassandra roles are not used in a Smoothwall cluster. Cassandra
+          throws role setup warnings when it cannot access the system_auth
+          keyspace. Create log filters to exclude these messages from syslog
+-         so that we don't spam the logs -->
++		 so that we don't spam the logs -->
++<!--
+     <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+       <evaluator>
+         <matcher>
+@@ -107,19 +108,20 @@
+     <suffixPattern>cassandra: %msg</suffixPattern>
+     <appender-ref ref="SYSLOG" />
+   </appender>
++-->
+ 
+   <!-- Uncomment bellow and corresponding appender-ref to activate logback metrics
+   <appender name="LogbackMetrics" class="com.codahale.metrics.logback.InstrumentedAppender" />
+    -->
+ 
+   <root level="INFO">
+-    <!-- <appender-ref ref="SYSTEMLOG" /> --> <!-- Disabled system.log as duplicate of SYSLOG -->
++    <appender-ref ref="SYSTEMLOG" />
+     <appender-ref ref="STDOUT" />
+     <!-- <appender-ref ref="ASYNCDEBUGLOG" /> --> <!-- Uncomment this line to enable debug.log -->
+     <!--
+     <appender-ref ref="LogbackMetrics" />
+     -->
+-    <appender-ref ref="SYSLOG" />
++	<!-- <appender-ref ref="SYSLOG" /> --> <!-- Disabled syslog as it starts listening on *:<random UDP port> -->
+   </root>
+ 
+   <logger name="org.apache.cassandra" level="DEBUG"/>

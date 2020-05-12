@@ -1,0 +1,22 @@
+Description: Fix issues with /etc/init.d/cassandra status
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+--- a/cassandra/etc/init.d/cassandra
++++ b/cassandra/etc/init.d/cassandra
+@@ -57,7 +57,7 @@
+ # process is not running but the pidfile exists (to match the exit codes for
+ # the "status" command; see LSB core spec 3.1, section 20.2)
+ #
+-CMD_PATT="cassandra.+CassandraDaemon"
++CMD_PATT="cassandra"
+ is_running()
+ {
+     if [ -f $PIDFILE ]; then
+@@ -153,7 +153,7 @@
+     stat=$?
+     case "$stat" in
+       0) log_success_msg "$DESC is running" ;;
+-      1) log_failure_msg "could not access pidfile for $DESC" ;;
++      1) log_failure_msg "could not access process from pidfile for $DESC" ;;
+       *) log_success_msg "$DESC is not running" ;;
+     esac
+     exit "$stat"

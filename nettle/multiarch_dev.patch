@@ -1,0 +1,40 @@
+--- a/aclocal.m4
++++ b/aclocal.m4
+@@ -856,11 +856,7 @@ AC_CHECK_TYPE(intmax_t,,,[#include <$ac_
+ 
+ fi # shortcircut to system "stdint.h"
+ # ------------------ PREPARE VARIABLES ------------------------------
+-if test "$GCC" = "yes" ; then
+-ac_cv_stdint_message="using gnu compiler "`$CC --version | head -1` 
+-else
+ ac_cv_stdint_message="using $CC"
+-fi
+ 
+ AC_MSG_RESULT([make use of $ac_cv_header_stdint in $ac_stdint_h dnl
+ $ac_cv_stdint_result])
+--- a/configure
++++ b/configure
+@@ -6471,11 +6471,7 @@ fi
+ 
+ fi # shortcircut to system "stdint.h"
+ # ------------------ PREPARE VARIABLES ------------------------------
+-if test "$GCC" = "yes" ; then
+-ac_cv_stdint_message="using gnu compiler "`$CC --version | head -1`
+-else
+ ac_cv_stdint_message="using $CC"
+-fi
+ 
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: make use of $ac_cv_header_stdint in $ac_stdint_h $ac_cv_stdint_result" >&5
+ $as_echo "make use of $ac_cv_header_stdint in $ac_stdint_h $ac_cv_stdint_result" >&6; }
+--- a/version.h.in
++++ b/version.h.in
+@@ -48,7 +48,8 @@ extern "C" {
+ /* We need a preprocessor constant for GMP_NUMB_BITS, simply using
+    sizeof(mp_limb_t) * CHAR_BIT is not good enough. */
+ #if NETTLE_USE_MINI_GMP
+-# define GMP_NUMB_BITS @GMP_NUMB_BITS@
++#  include <limits.h>
++#  define GMP_NUMB_BITS (__SIZEOF_LONG__ * CHAR_BIT)
+ #endif
+ 
+ int

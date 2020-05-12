@@ -1,0 +1,30 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Only scan exe for unrar
+ This patch only scans executable for unrar, and disables support for LHA
+ and unarj.  This was ported from a patch Smoothwall made for Amavis 2.3.2.
+--- a/amavisd
++++ b/amavisd
+@@ -1539,7 +1539,7 @@
+     ['tnef', \&Amavis::Unpackers::do_tnef_ext,   \$tnef],
+     ['tnef', \&Amavis::Unpackers::do_tnef],
+ #   ['sit',  \&Amavis::Unpackers::do_unstuff,    \$unstuff],  # not safe
+-    ['exe',  \&Amavis::Unpackers::do_executable, \$unrar,\$lha,\$unarj],
++    ['exe',  \&Amavis::Unpackers::do_executable, \$unrar],
+   );
+ 
+   # build_default_maps
+@@ -26967,10 +26967,10 @@
+ # chomp $@;
+ # do_log(3, "do_executable: not a LHA sfx, ignoring: %s", $@)    if $@ ne '';
+ 
+-  # ARJ?
+-  return 2  if defined $unarj && eval { do_unarj($part,$tempdir,$unarj,1) };
+-  chomp $@;
+-  do_log(3, "do_executable: not an ARJ sfx, ignoring: %s", $@)  if $@ ne '';
++# # ARJ?
++#  return 2  if defined $unarj && eval { do_unarj($part,$tempdir,$unarj,1) };
++#  chomp $@;
++#  do_log(3, "do_executable: not an ARJ sfx, ignoring: %s", $@)  if $@ ne '';
+ 
+   return 0;
+ }

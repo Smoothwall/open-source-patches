@@ -1,0 +1,69 @@
+Author: Gavin Harcourt <gavin.harcourt@gmail.com>
+Description: Use GCC's library searchdirs instead of a fixed list.
+diff --git a/makedefs b/makedefs
+index d68fa6c..3b13581 100644
+--- a/makedefs
++++ b/makedefs
+@@ -310,9 +310,16 @@ case "$SYSTEM.$RELEASE" in
+ 		    SYSLIBS="-ldb"
+ 		    ;;
+ 		esac
++		SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			sed -n '/^libraries: =/s/libraries: =//p' |
++			sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		if [ -z "$SEARCHDIRS" ]; then
++			SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		fi
+ 		for name in nsl resolv $GDBM_LIBS
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /lib
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"
+@@ -382,9 +389,16 @@ EOF
+ 		    SYSLIBS="-ldb"
+ 		    ;;
+ 		esac
++		SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			sed -n '/^libraries: =/s/libraries: =//p' |
++			sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		if [ -z "$SEARCHDIRS" ]; then
++			SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		fi
+ 		for name in nsl resolv
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /usr/lib/* /lib /lib/*
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"
+@@ -393,7 +407,7 @@ EOF
+ 		    done
+ 		done
+ 		;;
+-     GNU.0*|GNU/kFreeBSD.[567]*)
++     GNU.0*|GNU/kFreeBSD.*)
+ 		SYSTYPE=GNU0
+ 		case "$CCARGS" in
+ 		 *-DNO_DB*) ;;
+@@ -413,9 +427,16 @@ EOF
+ 		    SYSLIBS="-ldb"
+ 		    ;;
+ 		esac
++		SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			sed -n '/^libraries: =/s/libraries: =//p' |
++			sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		if [ -z "$SEARCHDIRS" ]; then
++			SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		fi
+ 		for name in nsl resolv
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /lib
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"

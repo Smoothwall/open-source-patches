@@ -1,0 +1,16 @@
+From: Harry Gibson <harry.gibson@smoothwall.net>
+Date: Wed, 26 Jun 2017 11:09:05 +0100
+Description: Use dhclient.leases instead of wildcard
+ path as Smoothwall does not have this sub-path
+
+Patch-Name: dhcplease.patch
+---
+
+--- a/azurelinuxagent/common/osutil/debian.py
++++ b/azurelinuxagent/common/osutil/debian.py
+@@ -55,4 +55,4 @@
+         pass
+ 
+     def get_dhcp_lease_endpoint(self):
+-        return self.get_endpoint_from_leases_path('/var/lib/dhcp/dhclient.*.leases')
++        return self.get_endpoint_from_leases_path('/var/lib/dhcp/dhclient.leases')

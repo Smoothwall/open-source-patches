@@ -1,0 +1,19 @@
+Author: Stuart Bishop <stuart.bishop@smoothwall.net>
+Description: Fix failing unit test "Test replication partial resync: ok psync"
+ Upstream issue on github see:
+ https://github.com/antirez/redis/issues/2715
+ Patch copied from upstream commit:
+ https://github.com/antirez/redis/commit/6a33952b8af18c4c0e778d93a69d97bc2adbc52e 
+diff --git a/tests/integration/replication-psync.tcl b/tests/integration/replication-psync.tcl
+index 3a41ceb..308d63d 100644
+--- a/tests/integration/replication-psync.tcl
++++ b/tests/integration/replication-psync.tcl
+@@ -110,7 +110,7 @@ foreach diskless {no yes} {
+     test_psync {no reconnection, just sync} 6 1000000 3600 0 {
+     } $diskless 0
+ 
+-    test_psync {ok psync} 6 1000000 3600 0 {
++    test_psync {ok psync} 6 100000000 3600 0 {
+         assert {[s -1 sync_partial_ok] > 0}
+     } $diskless 1
+ 

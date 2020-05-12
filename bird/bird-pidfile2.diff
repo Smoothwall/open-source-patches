@@ -1,0 +1,19 @@
+--- a/sysdep/unix/main.c
++++ b/sysdep/unix/main.c
+@@ -653,8 +653,15 @@
+       pid_t pid = fork();
+       if (pid < 0)
+ 	die("fork: %m");
+-      if (pid)
++      if (pid) {
++	FILE *fp;
++	if ((fp = fopen("/var/run/bird.pid", "w")) == NULL)
++		/* TA:  2012-08-31:  perror() or strerror()? */
++		die("fopen pid: %m");
++	fprintf(fp, "%d\n", (int)pid);
++	fclose(fp);
+ 	return 0;
++      }
+       setsid();
+       close(0);
+       if (open("/dev/null", O_RDWR) < 0)

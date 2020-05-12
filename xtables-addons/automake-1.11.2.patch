@@ -1,0 +1,16 @@
+Last-Update: 2012-02-04
+Author: Dmitry Smirnov <onlyjob@member.fsf.org>
+Forwarded: yes
+Description: fix FTBFS with automake 1.11.2
+ fixes error: "geoip/Makefile.am:3: `pkglibexecdir'
+ is not a legitimate directory for `SCRIPTS'"
+
+--- a/geoip/Makefile.am
++++ b/geoip/Makefile.am
+@@ -1,5 +1,5 @@
+ # -*- Makefile -*-
+ 
+-pkglibexec_SCRIPTS = xt_geoip_build xt_geoip_dl
++libexec_SCRIPTS = xt_geoip_build xt_geoip_dl
+ 
+ man1_MANS = xt_geoip_build.1 xt_geoip_dl.1

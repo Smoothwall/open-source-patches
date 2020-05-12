@@ -1,0 +1,24 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Don't assume /usr/ssl as a SSL_DIR anymore.
+ Also, use -lcrypto in linker flags.
+
+--- a/Makefile
++++ b/Makefile
+@@ -7,7 +7,7 @@
+ 
+ ##########
+ # Location of openssl installation
+-SSL_DIR = /usr/ssl
++SSL_DIR = /usr/include/openssl
+ 
+ ##########
+ # If using FreeBSD or OpenBSD COMMENT the below lines
+@@ -18,7 +18,7 @@
+ ##########
+ 
+ ifdef SSL
+-SSL_LIBS = -L$(SSL_DIR)/lib -lssl
++SSL_LIBS = -L$(SSL_DIR)/lib -lssl -lcrypto
+ SSL_FLAGS = -I$(SSL_DIR)/include -DHAVE_SSL
+ SSL_OBJS = sslstate.o
+ endif

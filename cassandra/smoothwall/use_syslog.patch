@@ -1,0 +1,79 @@
+Description: Configure Cassandra to log to syslog.
+ Send log output to the local syslog server on a Smoothwall using a
+ SyslogAppender in the logback configuration. This will allow errors
+ and status information to be accessible via the WebUI on a Smoothwall
+ system.
+ .
+ Disabled logging to system.log and debug.log files under /var/log/cassandra
+ to reduce the amount of output from Cassandra now that everything up to
+ INFO level logs are being output to syslog.
+ .
+ Created filters to stop Cassandra logging to syslog about not being able to
+ setup default roles. We do not use roles as authentication is disabled, so
+ these messages are now discarded to stop Cassandra spamming syslog.
+Author: Martin Pritchard <martin.pritchard@smoothwall.net>
+---
+--- a/cassandra/etc/cassandra/logback.xml
++++ b/cassandra/etc/cassandra/logback.xml
+@@ -67,17 +67,59 @@
+     </encoder>
+   </appender>
+ 
++  <!-- SYSLOG appender to local syslog daemon on UDP port 514 -->
++
++  <appender name="SYSLOG" class="ch.qos.logback.classic.net.SyslogAppender">
++    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
++      <level>INFO</level>
++    </filter>
++
++    <!-- Cassandra roles are not used in a Smoothwall cluster. Cassandra
++         throws role setup warnings when it cannot access the system_auth
++         keyspace. Create log filters to exclude these messages from syslog
++         so that we don't spam the logs -->
++    <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
++      <evaluator>
++        <matcher>
++          <Name>skipSetup</Name>
++          <regex>skipped default role setup</regex>
++        </matcher>
++        <expression>skipSetup.matches(formattedMessage)</expression>
++      </evaluator>
++      <onMismatch>NEUTRAL</onMismatch>
++      <onMatch>DENY</onMatch>
++    </filter>
++
++    <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
++      <evaluator>
++        <matcher>
++          <Name>rescheduleSetup</Name>
++          <regex>Setup task failed.*rescheduling</regex>
++        </matcher>
++        <expression>rescheduleSetup.matches(formattedMessage)</expression>
++      </evaluator>
++      <onMismatch>NEUTRAL</onMismatch>
++      <onMatch>DENY</onMatch>
++    </filter>
++
++    <syslogHost>localhost</syslogHost>
++    <facility>DAEMON</facility>
++    <suffixPattern>cassandra: %msg</suffixPattern>
++    <appender-ref ref="SYSLOG" />
++  </appender>
++
+   <!-- Uncomment bellow and corresponding appender-ref to activate logback metrics
+   <appender name="LogbackMetrics" class="com.codahale.metrics.logback.InstrumentedAppender" />
+    -->
+ 
+   <root level="INFO">
+-    <appender-ref ref="SYSTEMLOG" />
++    <!-- <appender-ref ref="SYSTEMLOG" /> --> <!-- Disabled system.log as duplicate of SYSLOG -->
+     <appender-ref ref="STDOUT" />
+-    <appender-ref ref="ASYNCDEBUGLOG" /> <!-- Comment this line to disable debug.log -->
++    <!-- <appender-ref ref="ASYNCDEBUGLOG" /> --> <!-- Uncomment this line to enable debug.log -->
+     <!--
+     <appender-ref ref="LogbackMetrics" />
+     -->
++    <appender-ref ref="SYSLOG" />
+   </root>
+ 
+   <logger name="org.apache.cassandra" level="DEBUG"/>

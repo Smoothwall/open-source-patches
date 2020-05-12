@@ -1,0 +1,27 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Restores old check that the proces can chdir() to the current
+ directory before attempting to load plugins. Not doing this leads to File::Find
+ throwing an exception within the import method and causing a compile error.
+--- a/lib/Data/Compare.pm
++++ b/lib/Data/Compare.pm
+@@ -25,7 +25,8 @@
+ use Cwd;
+ 
+ sub import {
+-  register_plugins() unless tainted getcwd();
++  my $cwd = getcwd();
++  register_plugins() unless(tainted $cwd || !chdir $cwd);
+   __PACKAGE__->export_to_level(1, @EXPORT);
+ }
+ 
+@@ -388,6 +389,10 @@
+ is usable.  The missing bits are bells and whistles rather than core
+ functionality.
+ 
++Plugins are unavailable if you can't change to the current directory.  This
++might happen if you started your process as a priveleged user and then
++dropped priveleges.  If this affects you, please supply a portable patch.
++
+ Please report any other bugs either by email to David Cantrell (see below
+ for address) or using rt.cpan.org:
+ 

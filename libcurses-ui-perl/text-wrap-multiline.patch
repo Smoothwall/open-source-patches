@@ -1,0 +1,21 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Extend Curses::UI::text_wrap() to break at newlines.
+
+diff --git a/lib/Curses/UI/Common.pm b/lib/Curses/UI/Common.pm
+index 83b64e6..9a77144 100644
+--- a/lib/Curses/UI/Common.pm
++++ b/lib/Curses/UI/Common.pm
+@@ -141,6 +141,13 @@ sub text_wrap($$;)
+     $wordwrap = WORDWRAP unless defined $wordwrap;
+     $maxlen = int $maxlen;
+     
++    if($line =~ m/\n/)
++    {
++        my @lines = split(m/\n/, $line);
++
++        return [ map { @{ text_wrap($_, $maxlen, $wordwrap) } } @lines ];
++    }
++
+     return [""] if $line eq '';
+ 
+     my @wrapped = ();

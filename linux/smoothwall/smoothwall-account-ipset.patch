@@ -1,0 +1,500 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Add smoothwall-account feature
+ Tests an ipset in order to increment the entry counters.
+--- a/net/netfilter/ipset/Makefile
++++ b/net/netfilter/ipset/Makefile
+@@ -6,6 +6,7 @@
+ 
+ # ipset core
+ obj-$(CONFIG_IP_SET) += ip_set.o
++obj-$(CONFIG_IP_SET) += ip_set_smoothwall_account.o
+ 
+ # bitmap types
+ obj-$(CONFIG_IP_SET_BITMAP_IP) += ip_set_bitmap_ip.o
+--- /dev/null
++++ b/net/netfilter/ipset/ip_set_smoothwall_account.c
+@@ -0,0 +1,440 @@
++#include <linux/module.h>
++#include <linux/netfilter/ipset/ip_set.h>
++#include <uapi/linux/netfilter/ipset/ip_set.h>
++#include <uapi/linux/if_ether.h>
++#include <linux/if_vlan.h>
++#include <linux/netfilter.h>
++#include <linux/netfilter_ipv6/ip6_tables.h>
++#include <linux/netfilter_ipv4/ip_tables.h>
++#include <net/ip.h>
++#include <linux/ip.h>
++#include <linux/ipv6.h>
++#include <linux/time.h>
++#include <net/netfilter/nf_conntrack.h>
++#include <linux/bitmap.h>
++#include <linux/types.h>
++#include <linux/smoothwall-account.h>
++
++#define NUM_PORTS 0x10000
++DECLARE_BITMAP(known_ports_bitmap, NUM_PORTS);
++static char *known_ports_old = NULL;
++static char *known_ports = NULL;
++module_param(known_ports, charp, 0600);
++
++static bool navl = false;
++module_param(navl, bool, 0600);
++
++static int skip_ipsets = 1001;
++module_param(skip_ipsets, int, 0600);
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Harry Mason <harry.mason@smoothwall.net>");
++MODULE_PARM_DESC(known_ports, "Port numbers or ranges which should be logged separately, not grouped as unknown; separated by commas.");
++MODULE_PARM_DESC(navl, "NAVL license holder; contains boolean value either N for false or Y for true.");
++MODULE_PARM_DESC(skip_ipsets, "The number of ipsets created statically, before any traffic reporting sets. When searching the list it will skip this many sets before testing set names.");
++
++static __be32 replace_ipv4_addr(struct sk_buff *skb, const __be32 new, bool src)
++{
++	struct iphdr *iph = ip_hdr(skb);
++	__be32 old;
++	if (src) {
++		old = iph->saddr;
++		iph->saddr = new;
++	}
++	else {
++		old = iph->daddr;
++		iph->daddr = new;
++	}
++	return old;
++}
++
++static struct in6_addr replace_ipv6_addr(struct sk_buff *skb, const struct in6_addr new, bool src)
++{
++	struct ipv6hdr *ipv6h = ipv6_hdr(skb);
++	struct in6_addr old;
++	if (src) {
++		old = ipv6h->saddr;
++		ipv6h->saddr = new;
++	}
++	else {
++		old = ipv6h->daddr;
++		ipv6h->daddr = new;
++	}
++	return old;
++}
++
++/* React if the list of known ports has been changed via sysfs. */
++static void refresh_known_ports(void)
++{
++	int ret;
++	/* When this option changes, the kernel will pass in a newly
++	 * allocated buffer. If the pointer is unchanged, nothing to do. */
++	if (known_ports == known_ports_old)
++		return;
++
++	known_ports_old = known_ports;
++	ret = bitmap_parselist(known_ports, known_ports_bitmap, NUM_PORTS);
++	if (ret < 0) {
++		pr_err("ip_set_smoothwall_account: cannot parse known ports");
++		/* If we can't parse the new list, treat it as empty, rather than
++		 * leave the bitmap in a partial state. */
++		bitmap_zero(known_ports_bitmap, NUM_PORTS);
++	}
++}
++
++static __u32 set_mark(struct sk_buff *skb, u8 proto, __be16 port)
++{
++	__u32 old = skb->mark;
++
++	/* The 12 most significant bits in the mark are used by NAVL, with
++	 * the first used for its "finished" bit, which we don't care about
++	 * here. The other bits are used elsewhere in the firewall, so we
++	 * mask them out. Then they are spare to store the protocol and port
++	 * number here for traffic that NAVL cannot identify.
++	 * If the layout of bits ever changes, for instance if NAVL gets more
++	 * bits, this code will need to change.
++	 */
++	skb->mark &= 0x7fe00000;
++
++	/* Return if NAVL is licensed and NAVL identified the protocol */
++	if (navl && (skb->mark != 0x00000000) && (skb->mark != 0x7fe00000)) {
++		return old;
++	}
++
++	/* Encode the protocol and port in the spare bits. */
++	switch (proto) {
++	case IPPROTO_TCP:
++		skb->mark = 0x00010000;
++		if (test_bit(ntohs(port), known_ports_bitmap)) {
++			skb->mark |= ntohs(port);
++		}
++		break;
++	case IPPROTO_UDP:
++	case IPPROTO_UDPLITE:
++		skb->mark = 0x00020000;
++		if (test_bit(ntohs(port), known_ports_bitmap)) {
++			skb->mark |= ntohs(port);
++		}
++		break;
++	default:
++		skb->mark = proto;
++	}
++
++	return old;
++}
++
++/* These should really be configurable through sysfs/proc later */
++static int num_buckets = 2;
++static int seconds_per_bucket = 600;
++
++/* Pass the packet through an ipset to account for it. If the entry did not
++ * exist in the set, add it first.
++ *
++ * The set name has this form: <dir>_<ipver>_<interface>_<bucket>, e.g.
++ * t_v4_eth0_2 = transmit, IPv4, eth0 interface, between xx:20:00 and xx:29:59
++ *
++ * If the set does not exist, nothing will happen.
++ * If the set is too full to add another entry, new entries will be lost.
++ * The set should be hash:ip,mark.
++ *
++ * Based on em_ipset in the sched code.
++ */
++
++static void ip_set_smoothwall_account(
++	char dir,
++	struct sk_buff *skb,
++	const struct net_device *dev,
++	u8 flags)
++{
++	ip_set_id_t index;
++	struct ip_set *set;
++	char setname[IPSET_MAXNAMELEN];
++	struct ip_set_adt_opt opt;
++	struct xt_action_param acpar;
++	struct net_device *indev = NULL;
++	int ret;
++	struct timespec now;
++	int bucket;
++	struct net *net = dev_net(dev);
++
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++		acpar.family = NFPROTO_IPV4;
++		acpar.thoff = ip_hdrlen(skb);
++		break;
++	case htons(ETH_P_IPV6):
++		acpar.family = NFPROTO_IPV6;
++		/* doesn't call ipv6_find_hdr() because ipset doesn't use thoff, yet */
++		acpar.thoff = sizeof(struct ipv6hdr);
++		break;
++	default:
++		return;
++	}
++
++	/* Derive the bucket number. Use the current time, not the skb time, in
++	 * case of queue delay. */
++	getnstimeofday(&now);
++	bucket = (now.tv_sec / seconds_per_bucket) % num_buckets;
++
++	/* Derive the set name. Limit the interface name length so we can
++	 * fit in the maximum set name length. */
++	snprintf(setname, IPSET_MAXNAMELEN, "%c_v%c_%.8s_%d",
++		dir,
++		(acpar.family == NFPROTO_IPV4 ? '4' : '6'),
++		dev->name,
++		bucket);
++	setname[IPSET_MAXNAMELEN-1] = '\0';
++
++	/* This locks the ipset until we call ip_set_put_by_index */
++	index = ip_set_get_byname_skip(net, setname, &set, skip_ipsets);
++	if (index == IPSET_INVALID_ID)
++		return;
++
++	acpar.hooknum = 0;
++
++	opt.family = acpar.family;
++	opt.dim = IPSET_DIM_TWO; /* expecting hash:ip,mark */
++	opt.cmdflags = 0;
++	opt.flags = flags;
++	/* Use the default set timeout. Our entries should be cleaned up before
++	 * they would time out. */
++	opt.ext.timeout = ~0u;
++	/* For userland, this means "don't overwrite the current counters". It
++	 * currently has no effect here but means the structure is fully
++	 * initialised. */
++	opt.ext.bytes   = ~0ull;
++	opt.ext.packets = ~0ull;
++
++	rcu_read_lock();
++
++	/* Should be irrelevant here, as we're not using a set type where the
++	 * interface is present; but this is what em_ipset does. */
++	if (dev && skb->skb_iif)
++		indev = dev_get_by_index_rcu(net, skb->skb_iif);
++
++	acpar.in  = indev ? indev : dev;
++	acpar.out = dev;
++
++	ret = ip_set_test(index, skb, &acpar, &opt);
++	if (!ret) {
++		ret = ip_set_add(index, skb, &acpar, &opt);
++	}
++
++	rcu_read_unlock();
++
++	/* Unlock the ipset */
++	ip_set_put_byindex(net, index);
++}
++
++static void smoothwall_account_mangle(
++	const char dir,
++	struct sk_buff *skb,
++	const struct net_device *dev)
++{
++	int network_offset;
++	enum ip_conntrack_info ctinfo;
++	const struct nf_conntrack_tuple *tuple;
++	const struct nf_conn *ct;
++	__be32 orig_addr_v4 = 0;
++	struct in6_addr orig_addr_v6 = { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } };
++	__u32 orig_mark;
++	u8 proto = 0;
++	__be16 port = 0;
++	u8 flags = 0;
++
++	/* In practice initializing orig_addr_* is redundant since the same switch
++	 * condition on skb->protocol individually sets and uses only the right
++	 * one. But GCC 4.9 isn't smart enough to reason through this for the v4
++	 * case, and we want a warning-clean build. */
++
++	/* Move the data pointer to the network header */
++	network_offset = skb_network_offset(skb);
++	skb_pull(skb, network_offset);
++
++	ct = nf_ct_get(skb, &ctinfo);
++	if (!ct) {
++		goto give_up;
++	}
++	while (ct->master) {
++		ct = ct->master;
++	}
++
++	tuple = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
++	proto = tuple->dst.protonum;
++	port = tuple->dst.u.all;
++
++	/* Rewrite the packet's source address to be the source of the
++	 * initiator of the connection. */
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++		if (!pskb_network_may_pull(skb, sizeof(struct iphdr))) {
++			goto give_up;
++		}
++		orig_addr_v4 = replace_ipv4_addr(skb, tuple->src.u3.ip, true);
++		break;
++	case htons(ETH_P_IPV6):
++		if (!pskb_network_may_pull(skb, sizeof(struct ipv6hdr))) {
++			goto give_up;
++		}
++		orig_addr_v6 = replace_ipv6_addr(skb, tuple->src.u3.in6, true);
++		break;
++	default:
++		goto give_up;
++	}
++
++	refresh_known_ports();
++	/* Pack the protocol and port numbers into spare bits in the
++	 * skb mark. */
++	orig_mark = skb->mark;
++	set_mark(skb, proto, port);
++
++	/* Now the source address and mark are temporarily derived from
++	 * the initiator, tell ipset to always consider the source IP. */
++	flags = IPSET_DIM_ONE_SRC;
++
++	/* Account the packet. */
++	ip_set_smoothwall_account(dir, skb, dev, flags);
++
++	/* Undo the mangling we did to the packet. */
++	skb->mark = orig_mark;
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++		replace_ipv4_addr(skb, orig_addr_v4, true);
++		break;
++	case htons(ETH_P_IPV6):
++		replace_ipv6_addr(skb, orig_addr_v6, true);
++		break;
++	}
++
++give_up:
++	/* Move the data pointer back again */
++	skb_push(skb, network_offset);
++}
++
++
++/* Netfilter hooks which call our accounting function. */
++static unsigned int smoothwall_account_rx(
++	const struct nf_hook_ops *ops,
++	struct sk_buff *skb,
++	const struct net_device *in,
++	const struct net_device *out,
++	int (*okfn)(struct sk_buff *))
++{
++	/* If the packet came from a bridge, account it against the
++	 * bridge port. */
++	const struct net_device *dev = in;
++#ifdef CONFIG_BRIDGE_NETFILTER
++	if (skb->nf_bridge) {
++		dev = skb->nf_bridge->physindev;
++	}
++#endif
++
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++	case htons(ETH_P_IPV6):
++		smoothwall_account_mangle('r', skb, dev);
++		return NF_ACCEPT;
++
++	default:
++		return NF_ACCEPT;
++	}
++}
++
++static unsigned int smoothwall_account_tx(
++	const struct nf_hook_ops *ops,
++	struct sk_buff *skb,
++	const struct net_device *in,
++	const struct net_device *out,
++	int (*okfn)(struct sk_buff *))
++{
++	/* If the packet is for a VLAN, and the hardware does accelerated
++	 * VLAN tagging, skb->protocol will be the inner protocol and not
++	 * ETH_P_8021Q. */
++	if (vlan_tx_tag_present(skb)) {
++		return NF_ACCEPT;
++	}
++
++	switch (skb->protocol) {
++	case htons(ETH_P_IP):
++	case htons(ETH_P_IPV6):
++		smoothwall_account_mangle('t', skb, out);
++		return NF_ACCEPT;
++
++	default:
++		return NF_ACCEPT;
++	}
++}
++
++/* Add receive hooks between mangle and filter in the INPUT and FORWARD
++ * paths. Transmit is done with the smoothwall_account hook and not a
++ * predefined netfilter hook.
++ */
++static struct nf_hook_ops nf_smoothwall_account_ops[] __read_mostly = {
++	{
++		.hook = smoothwall_account_rx,
++		.owner = THIS_MODULE,
++		.pf = NFPROTO_IPV4,
++		.hooknum = NF_INET_LOCAL_IN,
++		.priority = NF_IP_PRI_FILTER - 1,
++	},
++	{
++		.hook = smoothwall_account_rx,
++		.owner = THIS_MODULE,
++		.pf = NFPROTO_IPV4,
++		.hooknum = NF_INET_FORWARD,
++		.priority = NF_IP_PRI_FILTER - 1,
++	},
++};
++
++static int __init
++ip_set_smoothwall_account_init(void)
++{
++	int ret;
++	ret = nf_register_hooks(nf_smoothwall_account_ops,
++		ARRAY_SIZE(nf_smoothwall_account_ops));
++	if (ret < 0) {
++		pr_err("ip_set_smoothwall_account: cannot register netfilter hooks\n");
++		goto nf_hook_error;
++	}
++	ret = smoothwall_account_set_hook(&smoothwall_account_tx);
++	if (ret < 0) {
++		pr_err("ip_set_smoothwall_account: cannot register smoothwall hooks\n");
++		goto sw_hook_error;
++	}
++
++	if (known_ports) {
++		ret = bitmap_parselist(known_ports, known_ports_bitmap, NUM_PORTS);
++		if (ret < 0) {
++			pr_err("ip_set_smoothwall_account: cannot parse known ports");
++			goto bitmap_parse_error;
++		}
++	} else {
++		bitmap_zero(known_ports_bitmap, NUM_PORTS);
++	}
++	known_ports_old = known_ports;
++
++	pr_info("ipset traffic accounting: v3\n");
++
++	return 0;
++
++bitmap_parse_error:
++	smoothwall_account_clear_hook();
++sw_hook_error:
++	nf_unregister_hooks(nf_smoothwall_account_ops,
++		ARRAY_SIZE(nf_smoothwall_account_ops));
++nf_hook_error:
++	return ret;
++}
++
++static void __exit
++ip_set_smoothwall_account_fini(void)
++{
++	smoothwall_account_clear_hook();
++	nf_unregister_hooks(nf_smoothwall_account_ops,
++		ARRAY_SIZE(nf_smoothwall_account_ops));
++
++	pr_info("ipset traffic accounting: unloaded\n");
++}
++
++module_init(ip_set_smoothwall_account_init);
++module_exit(ip_set_smoothwall_account_fini);
+--- a/include/linux/netfilter/ipset/ip_set.h
++++ b/include/linux/netfilter/ipset/ip_set.h
+@@ -334,6 +334,8 @@
+ };
+ 
+ /* register and unregister set references */
++extern ip_set_id_t ip_set_get_byname_skip(struct net *net,
++				     const char *name, struct ip_set **set, ip_set_id_t skip);
+ extern ip_set_id_t ip_set_get_byname(struct net *net,
+ 				     const char *name, struct ip_set **set);
+ extern void ip_set_put_byindex(struct net *net, ip_set_id_t index);
+--- a/net/netfilter/ipset/ip_set_core.c
++++ b/net/netfilter/ipset/ip_set_core.c
+@@ -548,14 +548,14 @@
+  *
+  */
+ ip_set_id_t
+-ip_set_get_byname(struct net *net, const char *name, struct ip_set **set)
++ip_set_get_byname_skip(struct net *net, const char *name, struct ip_set **set, ip_set_id_t skip)
+ {
+ 	ip_set_id_t i, index = IPSET_INVALID_ID;
+ 	struct ip_set *s;
+ 	struct ip_set_net *inst = ip_set_pernet(net);
+ 
+ 	rcu_read_lock();
+-	for (i = 0; i < inst->ip_set_max; i++) {
++	for (i = skip; i < inst->ip_set_max; i++) {
+ 		s = rcu_dereference(inst->ip_set_list)[i];
+ 		if (s != NULL && STREQ(s->name, name)) {
+ 			__ip_set_get(s);
+@@ -568,6 +568,13 @@
+ 
+ 	return index;
+ }
++EXPORT_SYMBOL_GPL(ip_set_get_byname_skip);
++
++ip_set_id_t
++ip_set_get_byname(struct net *net, const char *name, struct ip_set **set)
++{
++	return ip_set_get_byname_skip(net, name, set, 0);
++}
+ EXPORT_SYMBOL_GPL(ip_set_get_byname);
+ 
+ /*

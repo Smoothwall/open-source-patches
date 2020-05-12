@@ -1,0 +1,59 @@
+Author:  Thomas Adam <thomas.adam@smoothwall.net>
+Description: Allow inbound/outbound "ifaces" to be IP addresses
+ Currently, siproxd accepts only a physical interface name with which to
+ look up the IP address to use for connections.
+ In FR49, an interface could have more than one IP address making specifying
+ just the interface problematic; therefore, allow siproxd to accept an IP
+ address in its configuration file for in/out bound connections.
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -57,6 +57,7 @@
+ 
+ extern int h_errno;
+ 
++static int is_valid_ip(const char *ip);
+ 
+ /*
+  * resolve a hostname and return in_addr
+@@ -396,6 +397,13 @@
+    return sts;
+ }
+ 
++static int is_valid_ip(const char *ip)
++{
++	struct sockaddr_in sa;
++
++	int res = inet_pton(AF_INET, ip, &sa.sin_addr);
++	return res != 0;
++}
+ 
+ /*
+  * get_ip_by_ifname:
+@@ -404,6 +412,7 @@
+  * STS_SUCCESS on returning a valid IP and interface is UP
+  * STS_FAILURE if interface is DOWN or other problem
+  */
++
+ int get_ip_by_ifname(char *ifname, struct in_addr *retaddr) {
+    struct in_addr ifaddr; /* resulting IP */
+    int i, j;
+@@ -431,6 +440,19 @@
+       return STS_FAILURE;
+    }
+ 
++   /* TA:  If the "iface" looks like an IP address, put that in the in_addr,
++    * and skip looking at interfaces.
++    */
++   if (is_valid_ip(ifname)) {
++	   DEBUGC(DBCLASS_SIP, "Valid IP found '%s', not binding to iface",
++		ifname);
++	   if (retaddr)
++		   memset(retaddr, 0, sizeof(retaddr));
++	   inet_aton(ifname, retaddr);
++
++	   return STS_SUCCESS;
++   }
++
+    /* first time: initialize ifaddr cache */
+    if (cache_initialized == 0) {
+       DEBUGC(DBCLASS_DNS, "initializing ifaddr cache (%i entries)", 

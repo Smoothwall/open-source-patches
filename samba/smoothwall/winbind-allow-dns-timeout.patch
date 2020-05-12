@@ -1,0 +1,26 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Don't cache DNS timeout errors
+ .
+ This code assumes that if a DNS server times out, the server is bad and
+ should not be tried for 30 seconds to avoid timing out again. This
+ results in refusing to make any DNS requests for that time, which
+ stops authentication completely.
+ .
+ We require DNS to be reliable in general or the whole system will fail.
+ However, a common case is that certain domains are unreachable from our
+ upstream DNS server and requests for these domains will time out, but other
+ requests are fine. Therefore treat a timeout as a temporary failure;
+ return it, but don't cache the response for all future requests.
+Index: samba/lib/addns/dnsquery.c
+===================================================================
+--- samba.orig/lib/addns/dnsquery.c	2016-08-08 15:25:52.294956348 +0100
++++ samba/lib/addns/dnsquery.c	2016-08-09 11:11:22.105043947 +0100
+@@ -312,7 +312,7 @@
+ 	   in the 30 second cache window, just return the previous
+ 	   status and save the network timeout. */
+ 
+-	if ( (NT_STATUS_EQUAL(last_dns_status,NT_STATUS_IO_TIMEOUT) ||
++	if ( (
+ 	      NT_STATUS_EQUAL(last_dns_status,NT_STATUS_CONNECTION_REFUSED)) &&
+ 	     (last_dns_check+DNS_FAILED_WAITTIME) > now )
+ 	{

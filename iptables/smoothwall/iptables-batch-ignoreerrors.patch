@@ -1,0 +1,63 @@
+Author: David Hubner <david.hubner@smoothwall.net>
+Description: ignore-error feature for commands which may fail
+ .
+  To support use cases like "create this chain, unless it exists",
+  add an option to run a command which may fail. Use this syntax:
+  .
+  ignore-error
+  iptables -N chain-that-exists
+  .
+  ignore-error only affects the next normal command.
+--- a/iptables/iptables-batch.c
++++ b/iptables/iptables-batch.c
+@@ -262,7 +262,7 @@
+ }
+ 
+ static int
+-do_iptables(int argc, char* argv[])
++do_iptables(int argc, char* argv[], int ignore_error)
+ {
+ 	char *table = "filter";
+ 	int ret = 0;
+@@ -272,6 +272,8 @@
+ 
+ #ifdef IP6T
+ 	ret = do_command6(argc, argv, &table, &current_table->handle, true);
++	if (ignore_error)
++		return 1;
+ 
+ 	if (!ret)
+ 	{
+@@ -288,6 +290,8 @@
+ 	}
+ #else
+ 	ret = do_command4(argc, argv, &table, &current_table->handle, true);
++	if (ignore_error)
++		return 1;
+ 
+ 	if (!ret)
+ 	{
+@@ -358,6 +362,7 @@
+ 	int nargc = 0;
+ 	char* nargv[256];
+ 	FILE* fp = stdin;
++	int ignore_error = 0;
+ 
+ #ifdef IP6T
+ 	prog_name = "ip6tables-batch";
+@@ -453,9 +458,14 @@
+ 		if(!strcmp(nargv[0], "iptables"))
+ #endif
+ 		{
+-			ret = do_iptables(nargc, nargv);
++			ret = do_iptables(nargc, nargv, ignore_error);
++			ignore_error = 0;
+ 			if(!ret) break;
+ 		}
++		else if(!strcmp(nargv[0], "ignore-error"))
++		{
++			ignore_error = 1;
++		}
+ 		else if(!strcmp(nargv[0], "exit"))
+ 		{
+ 			break;

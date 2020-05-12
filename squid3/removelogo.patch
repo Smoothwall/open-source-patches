@@ -1,0 +1,12 @@
+Author: David Hubner <david.hubner@smoothwall.net>
+Description: Remove logo from squid error pages.
+--- a/errors/errorpage.css
++++ b/errors/errorpage.css
+@@ -31,7 +31,6 @@
+ 	margin-left: 15px;
+ 	padding: 10px;
+ 	padding-left: 100px;
+-	background: url('/squid-internal-static/icons/SN.png') no-repeat left;
+ }
+ 
+ /* initial title */

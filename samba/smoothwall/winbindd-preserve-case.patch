@@ -1,0 +1,144 @@
+Author: Vytas Dauksa <vytas.dauksa@smoothwall.net>
+Description: Backported an option to preserve case of username/groups.
+ Backported Alexander Werth patch, that adds option to preserve case. see
+ https://lists.samba.org/archive/samba-technical/2014-September/102352.html
+Index: samba/docs-xml/smbdotconf/winbind/winbindpreservecase.xml
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ samba/docs-xml/smbdotconf/winbind/winbindpreservecase.xml	2016-08-11 11:35:08.077306113 +0100
+@@ -0,0 +1,29 @@
++<samba:parameter name="winbind preserve case"
++        context="G"
++        type="boolean"
++        advanced="1" developer="1"
++        xmlns:samba="http://www.samba.org/samba/DTD/samba-doc">
++<description>
++    <para>This parameter controls whether winbindd will
++      preserve the case of all user and group names.
++      If not all names are canonicalized to lower case.
++      Enforced canonicalization to lower case allows to add
++      reverse cache entries on case insensitive name to id
++      lookups. As a tradeoff all returned names are lower case
++      even if they are stored as mixed case in the AD server.
++      This option is enabled by default.
++      This option is particularly important if the returned user
++      and group names are used in a case sensitive match on
++      another host.
++      For example if the generated usernames are used in NFSv4
++      ACLs and the remote host uses a case sensitive matching for
++      these usernames with the nss_ldap module instead of the
++      nss_winbind module. In this case the option should be
++      disabled.
++    </para>
++
++</description>
++
++<value type="default">no</value>
++<value type="example">yes</value>
++</samba:parameter>
+Index: samba/source3/winbindd/winbindd_cache.c
+===================================================================
+--- samba.orig/source3/winbindd/winbindd_cache.c	2016-08-11 11:35:08.077306113 +0100
++++ samba/source3/winbindd/winbindd_cache.c	2016-08-11 11:35:08.077306113 +0100
+@@ -1896,7 +1896,8 @@
+ 		wcache_save_name_to_sid(domain, status, domain_name, name, sid, *type);
+ 
+ 		/* Only save the reverse mapping if this was not a UPN */
+-		if (!strchr(name, '@')) {
++		/* and winbind isn't set to preserve the case of names.*/
++		if (!lp_winbind_preserve_case() && !strchr(name, '@')) {
+ 			if (!strupper_m(discard_const_p(char, domain_name))) {
+ 				return NT_STATUS_INVALID_PARAMETER;
+ 			}
+Index: samba/source3/winbindd/winbindd_util.c
+===================================================================
+--- samba.orig/source3/winbindd/winbindd_util.c	2016-08-11 11:35:08.077306113 +0100
++++ samba/source3/winbindd/winbindd_util.c	2016-08-11 11:35:08.077306113 +0100
+@@ -1022,14 +1022,18 @@
+     Also, if omit DOMAIN if 'winbind trusted domains only = true', as the
+     username is then unqualified in unix
+ 
+-    We always canonicalize as UPPERCASE DOMAIN, lowercase username.
++    We always canonicalize the domain to UPPERCASE DOMAIN.
++    The user or group names are canonicalized depending on the
++    winbind preserve case setting to lowercase names.
+ */
+ void fill_domain_username(fstring name, const char *domain, const char *user, bool can_assume)
+ {
+ 	fstring tmp_user;
+ 
+ 	fstrcpy(tmp_user, user);
+-	(void)strlower_m(tmp_user);
++	if (!lp_winbind_preserve_case()) {
++		(void)strlower_m(tmp_user);
++	}
+ 
+ 	if (can_assume && assume_domain(domain)) {
+ 		strlcpy(name, tmp_user, sizeof(fstring));
+@@ -1052,9 +1056,11 @@
+ 	char *tmp_user, *name;
+ 
+ 	tmp_user = talloc_strdup(mem_ctx, user);
+-	if (!strlower_m(tmp_user)) {
+-		TALLOC_FREE(tmp_user);
+-		return NULL;
++	if (!lp_winbind_preserve_case()) {
++		if (!strlower_m(tmp_user)) {
++			TALLOC_FREE(tmp_user);
++			return NULL;
++		}
+ 	}
+ 
+ 	if (can_assume && assume_domain(domain)) {
+Index: samba/lib/param/param_table.c
+===================================================================
+--- samba.orig/lib/param/param_table.c	2016-08-11 11:35:08.077306113 +0100
++++ samba/lib/param/param_table.c	2016-08-11 11:35:08.077306113 +0100
+@@ -4209,6 +4209,15 @@
+ 		.flags		= FLAG_ADVANCED,
+ 	},
+ 	{
++		.label      = "winbind preserve case",
++		.type       = P_BOOL,
++		.p_class    = P_GLOBAL,
++		.offset     = GLOBAL_VAR(winbind_preserve_case),
++		.special    = NULL,
++		.enum_list  = NULL,
++		.flags      = FLAG_ADVANCED,
++	},
++	{
+ 		.label		= "winbind rpc only",
+ 		.type		= P_BOOL,
+ 		.p_class	= P_GLOBAL,
+Index: samba/source3/winbindd/wb_fill_pwent.c
+===================================================================
+--- samba.orig/source3/winbindd/wb_fill_pwent.c	2016-08-11 11:35:08.077306113 +0100
++++ samba/source3/winbindd/wb_fill_pwent.c	2016-08-11 11:35:08.077306113 +0100
+@@ -138,9 +138,11 @@
+ 	/* Username */
+ 
+ 	fstrcpy(user_name, state->info->acct_name);
+-	if (!strlower_m(user_name)) {
+-		tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
+-		return;
++	if (!lp_winbind_preserve_case()) {
++		if (!strlower_m(user_name)) {
++			tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
++			return;
++		}
+ 	}
+ 	status = normalize_name_map(state, domain, user_name, &mapped_name);
+ 
+Index: samba/lib/param/loadparm.c
+===================================================================
+--- samba.orig/lib/param/loadparm.c	2016-08-11 11:35:08.077306113 +0100
++++ samba/lib/param/loadparm.c	2016-08-11 11:35:08.077306113 +0100
+@@ -2740,6 +2740,8 @@
+ 
+ 	lpcfg_do_global_parameter(lp_ctx, "winbind max domain connections", "1");
+ 
++	lpcfg_do_global_parameter(lp_ctx, "winbind preserve case", "False");
++
+ 	lpcfg_do_global_parameter(lp_ctx, "case sensitive", "auto");
+ 
+ 	lpcfg_do_global_parameter(lp_ctx, "ldap timeout", "15");

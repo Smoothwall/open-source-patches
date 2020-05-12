@@ -1,0 +1,22 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Remove config file checking for EUID/EGID and root.
+ We run amavisd as a user other than root, so to this end, don't allow
+ amavisd to enforce this when trying to read its configuration file.
+--- a/amavisd
++++ b/amavisd
+@@ -1979,15 +1979,11 @@
+   if ($errn == ENOENT && $is_optional) {
+     # don't complain if missing
+   } else {
+-    my($owner_uid) = $stat_list[4];
+     my($msg);
+     if ($errn == ENOENT) { $msg = "does not exist" }
+     elsif ($errn)        { $msg = "is inaccessible: $!" }
+     elsif (-d _)         { $msg = "is a directory" }
+     elsif (!-f _)        { $msg = "is not a regular file" }
+-    elsif ($> && -o _)   { $msg = "should not be owned by EUID $>"}
+-    elsif ($> && -w _)   { $msg = "is writable by EUID $>, EGID $)" }
+-    elsif ($owner_uid)   { $msg = "should be owned by root (uid 0) "}
+     if (defined $msg)    { die "Config file \"$config_file\" $msg," }
+     $read_config_files_depth++;  push(@actual_config_files, $config_file);
+     if ($read_config_files_depth >= 100) {

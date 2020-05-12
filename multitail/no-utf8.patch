@@ -1,0 +1,16 @@
+Author: Thomas Adam <thomas.adam@smoothwall.net>
+Description: Disable UTF8 support
+ The ncurses version the Smoothwall uses doesn't use ncursesw/panelw for
+ wide-char support, but is still supported, just not linked using that name.
+ By disabling UTF8 support, we can link against the correct library, and
+ still get the benefit of UTF8.
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,6 @@
+ include version
+ 
+-UTF8_SUPPORT=yes
++UTF8_SUPPORT=no
+ DESTDIR=/
+ CONFIG_FILE=$(DESTDIR)/etc/multitail.conf
+ 

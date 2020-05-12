@@ -1,0 +1,27 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Implements a SetLocaliseQueriesOption D-Bus method for setting the
+ state of the -y/--localise-queries option.
+ KJ 12/10/17: Updated to apply to version bump 2.76-5+deb9u1
+--- a/src/dbus.c	2017-10-12 12:03:16.230195744 +0100
++++ b/src/dbus.c	2017-10-12 12:39:18.676752024 +0100
+@@ -52,6 +52,9 @@
+ "    <method name=\"SetFilterWin2KOption\">\n"
+ "      <arg name=\"filterwin2k\" direction=\"in\" type=\"b\"/>\n"
+ "    </method>\n"
++"    <method name=\"SetLocaliseQueriesOption\">\n"
++"      <arg name=\"localise-queries\" direction=\"in\" type=\"b\"/>\n"
++"    </method>\n"
+ "    <method name=\"SetBogusPrivOption\">\n"
+ "      <arg name=\"boguspriv\" direction=\"in\" type=\"b\"/>\n"
+ "    </method>\n"
+@@ -667,6 +670,10 @@
+     {
+       reply = dbus_set_bool(message, OPT_FILTER, "filterwin2k");
+     }
++  else if (strcmp(method, "SetLocaliseQueriesOption") == 0)
++    {
++      reply = dbus_set_bool(message, OPT_LOCALISE, "localise-queries");
++    }
+   else if (strcmp(method, "SetBogusPrivOption") == 0)
+     {
+       reply = dbus_set_bool(message, OPT_BOGUSPRIV, "bogus-priv");

@@ -1,0 +1,78 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Added iptables-batch locking based on Harry's ipbatch patch.
+ Enforce the iptables-batch locking in all iptables commands.
+ .
+ Moved the acquire_lock function out of iptables-batch.c into a header and call
+ it from the common entry point for iptables commands. This is to ensure that an
+ invocation of iptables (manual or otherwise) cannot race against another one.
+--- a/iptables/iptables-batch.c
++++ b/iptables/iptables-batch.c
+@@ -53,6 +53,8 @@
+ #define prog_ver iptables_globals.program_version
+ #endif
+ 
++#include "lock.h"
++
+ static char* errstr = NULL;
+ 
+ static unsigned current_line = 0;
+@@ -370,6 +372,10 @@
+ 	prog_name = "iptables-batch";
+ #endif
+ 
++	if (acquire_lock()) {
++		return 1;
++	}
++
+ #ifdef IP6T
+ 	c = xtables_init_all(&ip6tables_globals, NFPROTO_IPV6);
+ #else
+--- /dev/null
++++ b/iptables/lock.h
+@@ -0,0 +1,46 @@
++#include <unistd.h>
++#include <fcntl.h>
++#include <string.h>
++#include <errno.h>
++#include <stdio.h>
++
++#define LOCK_FILE "/var/run/ipbatch.lock"
++
++static int acquire_lock(void)
++{
++	struct flock f;
++	int fd;
++	int ret;
++
++	/* Exclusive lock entire file */
++	memset(&f, 0, sizeof(f));
++	f.l_type = F_WRLCK;
++	f.l_whence = SEEK_SET;
++	f.l_start = 0;
++	f.l_len = 0;
++
++	/* Open/create file */
++	do {
++		fd = open(LOCK_FILE, O_WRONLY | O_CREAT, 0666);
++	}
++	while(fd == -1 && errno == EINTR);
++
++	if (fd < 0) {
++		fprintf(stderr, "Can't open ipbatch lock file: %s\n", strerror(errno));
++		return fd;
++	}
++
++	/* Blocking wait for lock */
++	do {
++		ret = fcntl(fd, F_SETLKW, &f);
++	}
++	while ((ret == -1) && (errno == EINTR));
++	if (ret < 0) {
++		fprintf(stderr, "Can't acquire ipbatch lock: %s\n", strerror(errno));
++		return ret;
++	}
++
++	/* No need to release lock; it will go away on exit */
++
++	return 0;
++}

@@ -1,0 +1,44 @@
+Author: Nicholas Bamber <nicholas@periapt.co.uk>
+Subject: spelling mistakes
+Bug: https://rt.cpan.org/Ticket/Display.html?id=81988
+Forwarded: https://rt.cpan.org/Ticket/Display.html?id=81988
+Reviewed-By: Xavier Guimard <x.guimard@free.fr>
+Last-Update: 2012-12-14
+--- a/IP.pm
++++ b/IP.pm
+@@ -1233,7 +1233,7 @@
+ # Purpose           : Split a prefix into IP and prefix length
+ # Comments          : If it was passed a simple IP, it just returns it
+ # Params            : Prefix
+-# Returns           : IP, optionnaly length of prefix
++# Returns           : IP, optionally length of prefix
+ sub ip_splitprefix {
+     my $prefix = shift;
+ 
+@@ -2086,7 +2086,7 @@
+ 
+ Return the current object error string. The error string is set whenever one 
+ of the methods produces an error. Also, a global, class-wide B<Error()> 
+-function is avaliable.
++function is available.
+ 
+ C<warn ($ip-E<gt>error());>
+ 
+@@ -2409,7 +2409,7 @@
+ If it was passed a simple IP, it just returns it.
+ 
+     Params  : Prefix
+-    Returns : IP, optionnaly length of prefix
++    Returns : IP, optionally length of prefix
+ 
+ C<($ip,$len) = ip_splitprefix ($prefix)>
+ 
+@@ -2658,7 +2658,7 @@
+ 
+ The Math::BigInt library is needed for functions that use integers. These are
+ ip_inttobin, ip_bintoint, and the size method. In a next version, 
+-Math::BigInt will become optionnal.
++Math::BigInt will become optional.
+ 
+ =head1 AUTHORS
+ 

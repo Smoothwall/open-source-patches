@@ -1,0 +1,31 @@
+From b317aaf32a8a054f0274aef9137353bffef7a80c Mon Sep 17 00:00:00 2001
+From: Holger Weiss <holger@zedat.fu-berlin.de>
+Date: Tue, 6 Oct 2015 23:21:17 +0200
+Subject: [PATCH] check_smtp: QUIT SMTP connection when "-D" is used
+
+Don't forget to issue an SMTP QUIT command when the -D/--certificate
+option is specified.  This avoids undesired MTA log messages.
+---
+ plugins/check_smtp.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/plugins/check_smtp.c b/plugins/check_smtp.c
+index 56040ff..753ea3e 100644
+--- a/plugins/check_smtp.c
++++ b/plugins/check_smtp.c
+@@ -276,6 +276,7 @@ main (int argc, char **argv)
+ #  ifdef USE_OPENSSL
+ 		  if ( check_cert ) {
+                     result = np_net_ssl_check_cert(days_till_exp_warn, days_till_exp_crit);
++		    smtp_quit();
+ 		    my_close();
+ 		    return result;
+ 		  }
+@@ -607,6 +608,7 @@ process_arguments (int argc, char **argv)
+                             days_till_exp_warn = atoi (optarg);
+                         }
+ 			check_cert = TRUE;
++			ignore_send_quit_failure = TRUE;
+ #else
+ 			usage (_("SSL support not available - install OpenSSL and recompile"));
+ #endif

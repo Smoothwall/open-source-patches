@@ -1,0 +1,27 @@
+Author: Gavin Harcourt <gavin.harcourt@smoothwall.net>
+Description: Force the makedefs file to know about db.h It won't check this with some kind of compile time test.
+diff --git a/makedefs b/makedefs
+index d68fa6c..8271921 100644
+--- a/makedefs
++++ b/makedefs
+@@ -299,6 +299,9 @@ case "$SYSTEM.$RELEASE" in
+ 		    elif [ -f /usr/include/db/db.h ]
+ 		    then
+ 			CCARGS="$CCARGS -I/usr/include/db"
++	            elif [ -f /modules/zap/usr/include/db.h ]
++	            then
++	                CCARGS="$CCARGS -I/modules/zap/usr/include"
+ 		    else
+ 			# No, we're not going to try db1 db2 db3 etc.
+ 			# On a properly installed system, Postfix builds
+@@ -369,6 +372,9 @@ EOF
+ 		 *) if [ -f /usr/include/db.h ]
+ 		    then
+ 			: we are all set
++	            elif [ -f /modules/zap/usr/include/db.h ]
++	            then
++	                CCARGS="$CCARGS -I/modules/zap/usr/include"
+ 		    elif [ -f /usr/include/db/db.h ]
+ 		    then
+ 			CCARGS="$CCARGS -I/usr/include/db"
+

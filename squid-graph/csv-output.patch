@@ -1,0 +1,192 @@
+diff -Nurb squid-graph-3.1/bin/squid-graph squid-graph-3.1.new/bin/squid-graph
+--- squid-graph-3.1/bin/squid-graph	2002-08-24 16:01:00.000000000 +0100
++++ squid-graph-3.1.new/bin/squid-graph	2006-02-23 14:20:38.000000000 +0000
+@@ -605,6 +605,9 @@
+ 	open(IDX, ">$config{'output-dir'}/index.html") ||
+ 		error("Can't write to file $config{'output-dir'}/index.html. Check directory permissions?");
+ 
++	open(CSV, ">$config{'output-dir'}/data.csv") ||
++		error("Can't write to file $config{'output-dir'}/data.csv. Check directory permissions?");
++
+ 	print IDX "<HTML>\n";
+ 	print IDX "<HEAD>\n";
+ 	print IDX "<TITLE>$title</TITLE>\n";
+@@ -644,57 +647,88 @@
+ 	if ($have_tcp) {
+ 		print IDX "<BR><HR><BR>\n";
+ 		print IDX "<H3>Graph of TCP Accesses (5 minute total)</H3>\n" if (!$have_cumulative);
++		print CSV 'TCP Accesses (5 minute total),' if (!$have_cumulative);
+ 		print IDX "<H3>Cumulative graph of TCP Accesses</H3>\n" if ($have_cumulative);
++		print CSV 'TCP Accesses,' if ($have_cumulative);
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX "<TR>\n";
+ 		print IDX "<TD><IMG SRC=tcp-access.png></TD>\n";
++		print CSV 'tcp-access.png,';
+ 		print IDX "<TD>\n";
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX generate_html_row($grcolor,"Total Accesses",$tcpAccessTotals);
++		print CSV $tcpAccessTotals . ',';
+ 		print IDX generate_html_row($grcolor,"Average Accesses","$tcpAccessAverage per hour");
++		print CSV $tcpAccessAverage . ' per hour,';
+ 		print IDX generate_html_row($hitcolor,"Total Cache Hits",$tcpAccessHitTotals);
++		print CSV $tcpAccessHitTotals . ',';
+ 		print IDX generate_html_row($hitcolor,"Average Cache Hits","$tcpAccessHitAverage per hour");
++		print CSV $tcpAccessHitAverage . ' per hour,';
+ 		print IDX generate_html_row($hitcolor,"% Cache Hits","$tcpAccessHitPercentage %");
++		print CSV $tcpAccessHitPercentage . ',';
+ 		print IDX generate_html_row($imscolor,"Total Cache IMS Hits",$tcpAccessIMSTotals);
++		print CSV $tcpAccessIMSTotals . ',';
+ 		print IDX generate_html_row($imscolor,"Average Cache IMS Hits","$tcpAccessIMSAverage per hour");
++		print CSV $tcpAccessIMSAverage . ' per hour,';
+ 		print IDX generate_html_row($misscolor,"Total Cache Misses",$tcpAccessMissTotals);
++		print CSV $tcpAccessMissTotals . ',';
+ 		print IDX generate_html_row($misscolor,"Average Cache Misses","$tcpAccessMissAverage per hour");
++		print CSV $tcpAccessMissAverage . ' per hour,';
+ 		print IDX generate_html_row($misscolor,"% Cache Misses","$tcpAccessMissPercentage %");
++		print CSV $tcpAccessMissPercentage . ' %' . "\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "</TD>\n";
+ 		print IDX "</TR>\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "<H3>Graph of TCP Transfers (5 minute total)</H3>\n" if (!$have_cumulative);
++		print CSV 'TCP Transfers (5 minute total),' if (!$have_cumulative);
+ 		print IDX "<H3>Cumulative graph of TCP Transfers</H3>\n" if ($have_cumulative);
++		print CSV 'TCP Transfers,' if ($have_cumulative);
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX "<TR>\n";
+ 		print IDX "<TD><IMG SRC=tcp-transfer.png></TD>\n";
++		print CSV 'tcp-transfer.png,';
+ 		print IDX "<TD>\n";
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX generate_html_row($grcolor,"Total Transfers",$tcpTransferTotals);
++		print CSV $tcpTransferTotals . ',';
+ 		print IDX generate_html_row($grcolor,"Average Transfers","$tcpTransferAverage per hour");
++		print CSV $tcpTransferAverage . ' per hour,';
+ 		print IDX generate_html_row($hitcolor,"Total Cache Hits",$tcpTransferHitTotals);
++		print CSV $tcpTransferHitTotals . ',';
+ 		print IDX generate_html_row($hitcolor,"Average Cache Hits","$tcpTransferHitAverage per hour");
++		print CSV $tcpTransferHitAverage . ' per hour,';
+ 		print IDX generate_html_row($hitcolor,"% Cache Hits","$tcpTransferHitPercentage %");
++		print CSV $tcpTransferHitPercentage . ' %,';
+ 		print IDX generate_html_row($imscolor,"Total Cache IMS Hits",$tcpTransferIMSTotals);
++		print CSV $tcpTransferIMSTotals . ',';
+ 		print IDX generate_html_row($imscolor,"Average Cache IMS Hits","$tcpTransferIMSAverage per hour");
++		print CSV $tcpTransferIMSAverage . ' per hour,';
+ 		print IDX generate_html_row($misscolor,"Total Cache Misses",$tcpTransferMissTotals);
++		print CSV $tcpTransferMissTotals . ',';
+ 		print IDX generate_html_row($misscolor,"Average Cache Misses","$tcpTransferMissAverage per hour");
++		print CSV $tcpTransferMissAverage . ' per hour,';
+ 		print IDX generate_html_row($misscolor,"% Cache Misses","$tcpTransferMissPercentage %");
++		print CSV $tcpTransferMissPercentage . ' %' . "\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "</TD>\n";
+ 		print IDX "</TR>\n";
+ 		print IDX "</TABLE>\n";
+ 		if ($have_transfer) {
+-			print IDX "<H3>Graph of Average TCP Transfer Duration</H3>\n";
+ 			print IDX "<TABLE BORDER=0>\n";
++			print IDX "<H3>Graph of Average TCP Transfer Duration</H3>\n";
++			print CSV 'Average TCP Transfer Duration,';
+ 			print IDX "<TR>\n";
+ 			print IDX "<TD><IMG SRC=tcp-duration.png></TD>\n";
++			print CSV 'tcp-duration.png,';
+ 			print IDX "<TD>\n";
+ 			print IDX "<TABLE BORDER=0>\n";
+ 			print IDX generate_html_row($grcolor,"Avg. Transfer Duration","$tcpTimeAverage seconds");
++			print CSV $tcpTimeAverage . ' seconds,';
+ 			print IDX generate_html_row($hitcolor,"Avg. Cache Hit Duration","$tcpTimeHitAverage seconds");
++			print CSV $tcpTimeHitAverage . ' seconds,';
+ 			print IDX generate_html_row($misscolor,"Avg. Cache Miss Duration","$tcpTimeMissAverage seconds");
++			print CSV $tcpTimeMissAverage . ' seconds' . "\n";
+ 			print IDX "</TABLE>\n";
+ 			print IDX "</TD>\n";
+ 			print IDX "</TR>\n";
+@@ -705,53 +739,80 @@
+ 	if ($have_udp) {
+ 		print IDX "<BR><HR><BR>\n";
+ 		print IDX "<H3>Graph of UDP Accesses (5 minute total)</H3>\n" if (!$have_cumulative);
++		print CSV 'UDP Accesses (5 minute total),' if (!$have_cumulative);
+ 		print IDX "<H3>Cumulative graph of UDP Accesses</H3>\n" if ($have_cumulative);
++		print CSV 'UDP Accesses,' if ($have_cumulative);
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX "<TR>\n";
+ 		print IDX "<TD><IMG SRC=udp-access.png></TD>\n";
++		print CSV 'udp-access.png,';
+ 		print IDX "<TD>\n";
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX generate_html_row($grcolor,"Total Accesses",$udpAccessTotals);
++		print CSV $udpAccessTotals . ',';
+ 		print IDX generate_html_row($grcolor,"Average Accesses","$udpAccessAverage per hour");
++		print CSV $udpAccessAverage . ',';
+ 		print IDX generate_html_row($hitcolor,"Total Cache Hits",$udpAccessHitTotals);
++		print CSV $udpAccessHitTotals . ',';
+ 		print IDX generate_html_row($hitcolor,"Average Cache Hits","$udpAccessHitAverage per hour");
++		print CSV $udpAccessHitAverage . ',';
+ 		print IDX generate_html_row($hitcolor,"% Cache Hits","$udpAccessHitPercentage %");
++		print CSV $udpAccessHitPercentage . ',';
+ 		print IDX generate_html_row($misscolor,"Total Cache Misses",$udpAccessMissTotals);
++		print CSV $udpAccessMissTotals . ',';
+ 		print IDX generate_html_row($misscolor,"Average Cache Misses","$udpAccessMissAverage per hour");
++		print CSV $udpAccessMissAverage . ',';
+ 		print IDX generate_html_row($misscolor,"% Cache Misses","$udpAccessMissPercentage %");
++		print CSV $udpAccessMissPercentage . "\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "</TD>\n";
+ 		print IDX "</TR>\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "<H3>Graph of UDP Transfers (5 minute total)</H3>\n" if (!$have_cumulative);
++		print CSV 'UDP Transfers (5 minute total),' if (!$have_cumulative);
+ 		print IDX "<H3>Cumulative graph of UDP Transfers</H3>\n" if ($have_cumulative);
++		print CSV 'UDP Transfers,' if ($have_cumulative);
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX "<TR>\n";
+ 		print IDX "<TD><IMG SRC=udp-transfer.png></TD>\n";
++		print CSV 'udp-transfer.png,';
+ 		print IDX "<TD>\n";
+ 		print IDX "<TABLE BORDER=0>\n";
+ 		print IDX generate_html_row($grcolor,"Total Transfers",$udpTransferTotals);
++		print CSV $udpTransferTotals . ',';
+ 		print IDX generate_html_row($grcolor,"Average Transfers","$udpTransferAverage per hour");
++		print CSV $udpTransferAverage . ',';
+ 		print IDX generate_html_row($hitcolor,"Total Cache Hits",$udpTransferHitTotals);
++		print CSV $udpTransferHitTotals . ',';
+ 		print IDX generate_html_row($hitcolor,"Average Cache Hits","$udpTransferHitAverage per hour");
++		print CSV $udpTransferHitAverage . ',';
+ 		print IDX generate_html_row($hitcolor,"% Cache Hits","$udpTransferHitPercentage %");
++		print CSV $udpTransferHitPercentage . ',';
+ 		print IDX generate_html_row($misscolor,"Total Cache Misses",$udpTransferMissTotals);
++		print CSV $udpTransferMissTotals . ',';
+ 		print IDX generate_html_row($misscolor,"Average Cache Misses","$udpTransferMissAverage per hour");
++		print CSV $udpTransferMissAverage . ',';
+ 		print IDX generate_html_row($misscolor,"% Cache Misses","$udpTransferMissPercentage %");
++		print CSV $udpTransferMissPercentage . "\n";
+ 		print IDX "</TABLE>\n";
+ 		print IDX "</TD>\n";
+ 		print IDX "</TR>\n";
+ 		print IDX "</TABLE>\n";
+ 		if ($have_transfer) {
+ 			print IDX "<H3>Graph of Average UDP Transfer Duration</H3>\n";
++			print CSV 'Average UDP Transfer Duration,';
+ 			print IDX "<TABLE BORDER=0>\n";
+ 			print IDX "<TR>\n";
+ 			print IDX "<TD><IMG SRC=udp-duration.png></TD>\n";
++			print CSV 'udp-transfer.png,';
+ 			print IDX "<TD>\n";
+ 			print IDX "<TABLE BORDER=0>\n";
+ 			print IDX generate_html_row($grcolor,"Avg. Transfer Duration","$udpTimeAverage seconds");
++			print CSV $udpTimeAverage . ',';
+ 			print IDX generate_html_row($hitcolor,"Avg. Cache Hit Duration","$udpTimeHitAverage seconds");
++			print CSV $udpTimeHitAverage . ',';
+ 			print IDX generate_html_row($misscolor,"Avg. Cache Miss Duration","$udpTimeMissAverage seconds");
++			print CSV $udpTimeMissAverage . "\n";
+ 			print IDX "</TABLE>\n";
+ 			print IDX "</TD>\n";
+ 			print IDX "</TR>\n";
+@@ -786,6 +847,7 @@
+ </HTML>
+ EOF
+ 	close(IDX);
++	close(CSV);
+ 
+ 	console_log("Done.");
+ 	console_log("Remember to copy logo.png found in your Squid Graph images/ directory to $config{'output-dir'}!");

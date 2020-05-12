@@ -1,0 +1,10 @@
+--- a/proto/rip/config.Y
++++ b/proto/rip/config.Y
+@@ -31,6 +31,7 @@
+ 	    RIP_METRIC, RIP_TAG)
+ 
+ %type <i> rip_mode rip_auth
++%token AS
+ 
+ CF_GRAMMAR
+ 

@@ -1,0 +1,23 @@
+Description: This patch fixes the two wrong-path-for-interpreter errors 
+ reported by lintian.
+Origin: vendor
+Forwarded: no
+Author: Alessandro Ghedini <al3xbio@gmail.com>
+Last-Update: 2011-06-30
+
+--- a/Coro/jit-amd64-unix.pl
++++ b/Coro/jit-amd64-unix.pl
+@@ -1,4 +1,4 @@
+-#!/opt/bin/perl
++#!/usr/bin/perl
+ 
+ {
+    package Coro::State;
+--- a/Coro/jit-x86-unix.pl
++++ b/Coro/jit-x86-unix.pl
+@@ -1,4 +1,4 @@
+-#!/opt/bin/perl
++#!/usr/bin/perl
+ 
+ {
+    package Coro::State;

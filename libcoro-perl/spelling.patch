@@ -1,0 +1,68 @@
+Description: fix a spelling mistake
+Origin: vendor
+Bug: https://rt.cpan.org/Ticket/Display.html?id=82392
+Forwarded: https://rt.cpan.org/Ticket/Display.html?id=82392
+Author: gregor herrmann <gregoa@debian.org>
+Reviewed-by: Xavier Guimard <x.guimard@free.fr>
+Last-Update: 2013-06-02
+
+--- a/Coro.pm
++++ b/Coro.pm
+@@ -755,7 +755,7 @@
+ Returns true iff this Coro object is "new", i.e. has never been run
+ yet. Those states basically consist of only the code reference to call and
+ the arguments, but consumes very little other resources. New states will
+-automatically get assigned a perl interpreter when they are transfered to.
++automatically get assigned a perl interpreter when they are transferred to.
+ 
+ =item $state->is_zombie
+ 
+@@ -1263,7 +1263,7 @@
+ by the forks module, which gives you the (i-) threads API, just much
+ faster).
+ 
+-Sharing data is in the i-threads model is done by transfering data
++Sharing data is in the i-threads model is done by transferring data
+ structures between threads using copying semantics, which is very slow -
+ shared data simply does not exist. Benchmarks using i-threads which are
+ communication-intensive show extremely bad behaviour with i-threads (in
+--- a/Coro/State.pm
++++ b/Coro/State.pm
+@@ -178,7 +178,7 @@
+ everywhere.
+ 
+ If the coderef is omitted this function will create a new "empty"
+-thread, i.e. a thread that cannot be transfered to but can be used
++thread, i.e. a thread that cannot be transferred to but can be used
+ to save the current thread state in (note that this is dangerous, as no
+ reference is taken to ensure that the "current thread state" survives,
+ the caller is responsible to ensure that the cloned state does not go
+@@ -247,7 +247,7 @@
+ 
+ Forcefully destructs the given Coro::State. While you can keep the
+ reference, and some memory is still allocated, the Coro::State object is
+-effectively dead, destructors have been freed, it cannot be transfered to
++effectively dead, destructors have been freed, it cannot be transferred to
+ anymore, it's pushing up the daisies.
+ 
+ =item $state->call ($coderef)
+@@ -336,7 +336,7 @@
+ 
+ =head3 METHODS FOR C CONTEXTS
+ 
+-Most coros only consist of some Perl data structures - transfering to a
++Most coros only consist of some Perl data structures - transferring to a
+ coro just reconfigures the interpreter to continue somewhere else.
+ 
+ However. this is not always possible: For example, when Perl calls a C/XS function
+--- a/README
++++ b/README
+@@ -1037,7 +1037,7 @@
+     evidenced by the forks module, which gives you the (i-) threads API,
+     just much faster).
+ 
+-    Sharing data is in the i-threads model is done by transfering data
++    Sharing data is in the i-threads model is done by transferring data
+     structures between threads using copying semantics, which is very slow -
+     shared data simply does not exist. Benchmarks using i-threads which are
+     communication-intensive show extremely bad behaviour with i-threads (in

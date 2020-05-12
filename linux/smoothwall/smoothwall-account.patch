@@ -1,0 +1,125 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Add smoothwall account hook, and call it on send.
+ This hook can be used to account for packets actually sent.
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -345,6 +345,7 @@
+ {
+ }
+ #endif
++#include <linux/smoothwall-account.h>
+ 
+ /*******************************************************************************
+ 
+@@ -2667,6 +2668,8 @@
+ #endif
+ 			dev_queue_xmit_nit(skb, dev);
+ 
++		smoothwall_account_frame_tx(skb, dev);
++
+ 		skb_len = skb->len;
+ 		trace_net_dev_start_xmit(skb, dev);
+ 		rc = ops->ndo_start_xmit(skb, dev);
+@@ -2686,6 +2689,8 @@
+ 		if (!list_empty(&ptype_all))
+ 			dev_queue_xmit_nit(nskb, dev);
+ 
++		smoothwall_account_frame_tx(skb, dev);
++
+ 		skb_len = nskb->len;
+ 		trace_net_dev_start_xmit(nskb, dev);
+ 		rc = ops->ndo_start_xmit(nskb, dev);
+--- /dev/null
++++ b/include/linux/smoothwall-account.h
+@@ -0,0 +1,10 @@
++#ifndef _SMOOTHWALL_ACCOUNT_H
++#define _SMOOTHWALL_ACCOUNT_H
++
++#include <linux/skbuff.h>
++
++int smoothwall_account_set_hook(unsigned int (*)(const struct nf_hook_ops *, struct sk_buff *, const struct net_device *, const struct net_device *, int (*)(struct sk_buff *)));
++int smoothwall_account_clear_hook(void);
++void smoothwall_account_frame_tx(struct sk_buff *skb, const struct net_device *dev);
++
++#endif /* _SMOOTHWALL_ACCOUNT_H */
+--- a/net/core/Makefile
++++ b/net/core/Makefile
+@@ -9,7 +9,7 @@
+ 
+ obj-y		     += dev.o ethtool.o dev_addr_lists.o dst.o netevent.o \
+ 			neighbour.o rtnetlink.o utils.o link_watch.o filter.o \
+-			sock_diag.o dev_ioctl.o tso.o
++			sock_diag.o dev_ioctl.o tso.o smoothwall-account.o
+ 
+ obj-$(CONFIG_XFRM) += flow.o
+ obj-y += net-sysfs.o
+--- /dev/null
++++ b/net/core/smoothwall-account.c
+@@ -0,0 +1,67 @@
++#include <linux/module.h>
++#include <linux/if_ether.h>
++#include <linux/netfilter.h>
++#include <linux/smoothwall-account.h>
++
++/* Hook structured identically to a netfilter hook, so it can be used as
++ * a normal netfilter hook in the receive path, where it must go after
++ * Layer 7 classification.
++ */
++static unsigned int (*hook)(
++		const struct nf_hook_ops *,
++		struct sk_buff *,
++		const struct net_device *,
++		const struct net_device *,
++		int (*)(struct sk_buff *)) = NULL;
++
++/* Set the hook to be called just before packet send. This isn't a new
++ * netfilter hook because defining a new one is disruptive to iptables
++ * userland.
++ */
++int smoothwall_account_set_hook(
++	unsigned int (*new_hook)(
++		const struct nf_hook_ops *,
++		struct sk_buff *,
++		const struct net_device *,
++		const struct net_device *,
++		int (*)(struct sk_buff *)))
++{
++	if (hook != NULL)
++		return -EBUSY;
++	hook = new_hook;
++	return 0;
++}
++EXPORT_SYMBOL_GPL(smoothwall_account_set_hook);
++
++int smoothwall_account_clear_hook(void)
++{
++	hook = NULL;
++	return 0;
++}
++EXPORT_SYMBOL_GPL(smoothwall_account_clear_hook);
++
++/* This is used as the okfn in the netfilter hook API, but the rest of the
++ * transmit processing is handled by the caller, so we do nothing here. We
++ * ignore the return value of the hook and always send the packet.
++ *
++ * On receive, the hook will be called as part of a normal netfilter hook,
++ * so its return value would be significant. Our hook should always return
++ * NF_ACCEPT.
++ */
++static int smoothwall_account_hook_finish(struct sk_buff *skb)
++{
++	return 0;
++}
++
++/* Called by the core packet send code just before giving the packet to
++ * the driver. Calls the hook if one is defined. This indirection means
++ * the hook itself can be in a module, and can also be out of tree if
++ * necessary.
++ */
++void smoothwall_account_frame_tx(
++	struct sk_buff *skb,
++	const struct net_device *dev)
++{
++	if (hook != NULL)
++		(*hook)(0, skb, NULL, dev, &smoothwall_account_hook_finish);
++}

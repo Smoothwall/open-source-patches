@@ -1,0 +1,21 @@
+From: Maintenance <jagger@smoothwall.net>
+Description: This tries to work around the issue caused when Bitdefender is not
+ responding to the queries and leaves the client hanging on indefinitely.
+--- a/amavisd
++++ b/amavisd
+@@ -23091,8 +23091,13 @@
+       $sock->print($query) or die "Error writing to socket $socketname\n";
+       $sock->flush         or die "Error flushing socket $socketname\n";
+ 
+-      # normal timeout for reading a response
+-      prolong_timer('ask_daemon_internal_scan');
++      # In order to workaround a Antimalware's issue (the socket is ready
++      # and permits connections but the daemon is not responding to the
++      # query keeping the client hanging on), we're going to time out
++      # the task after 20 seconds, which is a good amount of time for
++      # scanning a big attachment (~30MB).
++      prolong_timer('ask_daemon_internal_scan', undef, undef, 20);
++
+       $sock->timeout(max(2, $deadline - Time::HiRes::time));
+       if ($multisession) {
+         # depends on TCP segment boundaries, unreliable

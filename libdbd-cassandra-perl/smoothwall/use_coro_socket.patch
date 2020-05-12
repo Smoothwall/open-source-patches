@@ -1,0 +1,39 @@
+Description: Allow Coro::Socket to be requested.
+ DBD::Cassandra uses an internal socket to communicate with Cassandra.
+ When this is used inside a Coro async the socket will block other
+ coroutines from running whilst it's waiting on I/O. Allow the caller
+ the ability to request that a Coro::Socket be used so that it can
+ better support being used from authd4.
+Author: Martin Pritchard <martin.pritchard@smoothwall.net>
+---
+--- a/lib/DBD/Cassandra/Connection.pm
++++ b/lib/DBD/Cassandra/Connection.pm
+@@ -20,6 +20,17 @@
+         ($args->{connect_timeout} ? ( Timeout => $args->{connect_timeout} ) : () ),
+     ) or die "Can't connect: $@";
+ 
++    # When creating a new DBD object the DBD::Cassandra::Connection socket can
++    # be set to create a Coro::Socket by including 'cass_coro' as an option
++    # e.g. DBI->connect("dbi:Cassandra...", $user, $pass, { cass_coro => 1, ... }
++    #
++    # This stops DBD::Cassandra from blocking a Coro event loop when called from
++    # within a Coro async
++    if ($args->{coro}) {
++        require Coro::Socket;
++        $socket = Coro::Socket->new_from_fh($socket);
++    }
++
+     $socket->setsockopt(SOL_SOCKET, SO_KEEPALIVE, 1);
+     if ($args->{read_timeout} || $args->{write_timeout}) {
+         IO::Socket::Timeout->enable_timeouts_on($socket);
+--- a/lib/DBD/Cassandra/dr.pm
++++ b/lib/DBD/Cassandra/dr.pm
+@@ -32,7 +32,7 @@
+     eval {
+         $connection= DBD::Cassandra::Connection->connect($host, $port, $user, $auth, {
+             map { exists $attr->{"cass_$_"} ? ($_ => $attr->{"cass_$_"}) : () }
+-                qw/compression cql_version read_timeout write_timeout connect_timeout/
++                qw/compression cql_version read_timeout write_timeout connect_timeout coro/
+         });
+         1;
+     } or do {

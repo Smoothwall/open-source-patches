@@ -1,0 +1,15 @@
+Author:  Thomas Adam <thomas.adam@smoothwall.net>
+Description: Add custom library path
+ This adds a custom "use lib" path to amavisd.
+--- a/amavisd
++++ b/amavisd
+@@ -1,5 +1,9 @@
+ #!/usr/bin/perl -T
+ 
++# TA:  2012-10-31 -- this probably isn't needed any more, but won't hurt
++# being here to maintain backwards compatibility.
++use lib '/modules/zap/usr/lib/perl5/site_perl';
++
+ #------------------------------------------------------------------------------
+ # This is amavisd-new.
+ # It is an interface between a message transfer agent (MTA) and virus

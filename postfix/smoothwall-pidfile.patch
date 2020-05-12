@@ -1,0 +1,47 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Adds additional pidfile to /var/run.
+A second pidfile for dashboard and smoothd to use, as well as the one
+already in spool/postfix/pid/master.pid
+--- a/src/master/master.c
++++ b/src/master/master.c
+@@ -232,8 +232,10 @@
+ {
+     static VSTREAM *lock_fp;
+     static VSTREAM *data_lock_fp;
++	static VSTREAM *lock_fp_smooth;
+     VSTRING *lock_path;
+     VSTRING *data_lock_path;
++    VSTRING *lock_path_smooth;
+     off_t   inherited_limit;
+     int     debug_me = 0;
+     int     ch;
+@@ -430,6 +432,29 @@
+     close_on_exec(vstream_fileno(lock_fp), CLOSE_ON_EXEC);
+ 
+     /*
++     * Add the pidfile for /var/run (for dashboard/smoothd/etc)
++     */
++	lock_path_smooth = vstring_alloc(10);
++    vstring_sprintf(lock_path_smooth, "/var/run/master.pid");
++    if (test_lock && access(vstring_str(lock_path_smooth), F_OK) < 0)
++        exit(0);
++    lock_fp_smooth = open_lock(vstring_str(lock_path_smooth), O_RDWR | O_CREAT, 0644, why);
++    if (test_lock)
++        exit(lock_fp_smooth ? 0 : 1);
++    if (lock_fp == 0)
++        msg_fatal("open lock file %s: %s",
++            vstring_str(lock_path_smooth), vstring_str(why));
++    vstream_fprintf(lock_fp_smooth, "%d\n", var_pid);
++    if (vstream_fflush(lock_fp_smooth))
++        msg_fatal("cannot update lockfile %s: %m", vstring_str(lock_path_smooth));
++    close_on_exec(vstream_fileno(lock_fp_smooth), CLOSE_ON_EXEC);
++	// Hack to get around this process being umasked 0077)
++	chmod(vstring_str(lock_path_smooth), 0644);
++	vstring_free(lock_path_smooth);
++
++
++
++    /*
+      * Lock down the Postfix-writable data directory.
+      */
+     vstring_sprintf(data_lock_path, "%s/%s.lock", var_data_dir, var_procname);

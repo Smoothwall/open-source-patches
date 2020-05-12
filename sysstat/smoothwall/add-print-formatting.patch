@@ -1,0 +1,13 @@
+Author: Artur Fratczak
+Description: Add missing string formatting.
+--- a/prf_stats.c
++++ b/prf_stats.c
+@@ -131,7 +131,7 @@
+ 			}
+ 		}
+ 		else {
+-			printf(txt[isdb]);	/* No args */
++			printf("%s", txt[isdb]);	/* No args */
+ 		}
+ 	}
+ 

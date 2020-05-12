@@ -1,0 +1,23 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Set winbind socket directory from environment
+ This means that we can run two instances of winbindd, and control
+ which one the client connects to. This lets us join multiple,
+ independent domains.
+Index: samba/nsswitch/wb_common.c
+===================================================================
+--- samba.orig/nsswitch/wb_common.c	2016-08-08 14:28:36.854873385 +0100
++++ samba/nsswitch/wb_common.c	2016-08-08 14:42:32.288064439 +0100
+@@ -349,6 +349,13 @@
+ 		}
+ 	}
+ 
++	const char *env_dir;
++
++	env_dir = getenv("WINBINDD_SOCKET_DIR");
++	if (env_dir != NULL) {
++		return env_dir;
++	}
++
+ 	return WINBINDD_SOCKET_DIR;
+ }
+ 

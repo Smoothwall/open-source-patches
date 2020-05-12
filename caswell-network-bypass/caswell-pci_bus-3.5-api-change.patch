@@ -1,0 +1,19 @@
+Description: API changes for struct pci_bus
+ As of 3527ed81ca01bbaf09df952e68528377a9cd092f on linux.git (kernel.org)
+ the struct pci_bus has changed so that ->secondary and ->subordinate has
+ been removed. The equivilant data is now found at ->busn_res.start and
+ ->busn_res.end ... at least according to some bods at:
+ http://forum.hyperion-entertainment.biz/viewtopic.php?f=35&t=1690&start=10
+Author: Lawrence Manning <lawrence.manning@smoothwall.net>
+
+--- caswell-network-bypass-2.0.0.orig/driver/bypass_slot.c
++++ caswell-network-bypass-2.0.0/driver/bypass_slot.c
+@@ -61,7 +61,7 @@ void search_slot_dev(int slot_id, struct
+ 	struct pci_dev *pdev;
+ 
+ 	for (i=0; i<SLOT_BRIDGE_NUM && slot_bridge[i]; i++){
+-		for (j=slot_bridge[i]->secondary; j<=slot_bridge[i]->subordinate; j++){
++		for (j=slot_bridge[i]->busn_res.start; j<=slot_bridge[i]->busn_res.end; j++){
+ 			if ((pdev = pci_scan_bus_and_slot(j, 0))!= NULL)
+ 				if ( (pdev->class == CLASS_LANCTRL) &&
+ 				       (pdev->subsystem_vendor == PORTWELL_VID) )

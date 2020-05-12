@@ -1,0 +1,12 @@
+--- a/lib/Curses/UI/Popupmenu.pm
++++ b/lib/Curses/UI/Popupmenu.pm
+@@ -266,6 +266,9 @@
+     foreach my $option (qw(
+ 	-values -labels 
+ 	-selected -wraparound
++	-bg -fg
++	-bbg -bfg
++	-sbg -sfg
+     )) {    
+         $listbox_options{$option} = $this->{$option}
+             if defined $this->{$option};

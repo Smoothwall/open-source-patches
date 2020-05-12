@@ -1,0 +1,79 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Add a try-command feature which allows attempting a command without
+ aborting the transaction if it fails. Also explicitly disables buffering on
+ stdout so other programs can get a response over a pipe.
+Forwarded: no
+
+--- a/iptables/iptables-batch.c
++++ b/iptables/iptables-batch.c
+@@ -264,7 +264,7 @@
+ }
+ 
+ static int
+-do_iptables(int argc, char* argv[], int ignore_error)
++do_iptables(int argc, char* argv[], int ignore_error, int try_command)
+ {
+ 	char *table = "filter";
+ 	int ret = 0;
+@@ -274,6 +274,11 @@
+ 
+ #ifdef IP6T
+ 	ret = do_command6(argc, argv, &table, &current_table->handle, true);
++	if (try_command)
++	{
++		printf("%s\n", (ret ? "ok" : "fail"));
++		return 1;
++	}
+ 	if (ignore_error)
+ 		return 1;
+ 
+@@ -292,6 +297,11 @@
+ 	}
+ #else
+ 	ret = do_command4(argc, argv, &table, &current_table->handle, true);
++	if (try_command)
++	{
++		printf("%s\n", (ret ? "ok" : "fail"));
++		return 1;
++	}
+ 	if (ignore_error)
+ 		return 1;
+ 
+@@ -365,6 +375,7 @@
+ 	char* nargv[256];
+ 	FILE* fp = stdin;
+ 	int ignore_error = 0;
++	int try_command  = 0;
+ 
+ #ifdef IP6T
+ 	prog_name = "ip6tables-batch";
+@@ -372,6 +383,8 @@
+ 	prog_name = "iptables-batch";
+ #endif
+ 
++	setbuf(stdout, NULL);
++
+ 	if (acquire_lock()) {
+ 		return 1;
+ 	}
+@@ -464,14 +477,19 @@
+ 		if(!strcmp(nargv[0], "iptables"))
+ #endif
+ 		{
+-			ret = do_iptables(nargc, nargv, ignore_error);
++			ret = do_iptables(nargc, nargv, ignore_error, try_command);
+ 			ignore_error = 0;
++			try_command  = 0;
+ 			if(!ret) break;
+ 		}
+ 		else if(!strcmp(nargv[0], "ignore-error"))
+ 		{
+ 			ignore_error = 1;
+ 		}
++		else if(!strcmp(nargv[0], "try-command"))
++		{
++			try_command = 1;
++		}
+ 		else if(!strcmp(nargv[0], "exit"))
+ 		{
+ 			break;

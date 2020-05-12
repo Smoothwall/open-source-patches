@@ -1,0 +1,97 @@
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>,
+        Stephen Ridley <stephen.ridley@smoothwall.net>
+Description: Calculate performance data thresholds with non-root
+ figures so consistent with % free and check status.
+--- a/plugins/check_disk.c
++++ b/plugins/check_disk.c
+@@ -288,8 +288,8 @@
+       get_stats (path, &fsp);
+ 
+       if (verbose >= 3) {
+-        printf ("For %s, used_pct=%g free_pct=%g used_units=%g free_units=%g total_units=%g used_inodes_pct=%g free_inodes_pct=%g fsp.fsu_blocksize=%llu mult=%llu\n",
+-          me->me_mountdir, path->dused_pct, path->dfree_pct, path->dused_units, path->dfree_units, path->dtotal_units, path->dused_inodes_percent, path->dfree_inodes_percent, fsp.fsu_blocksize, mult);
++        printf ("For %s, used_pct=%g free_pct=%g used_units=%g free_units=%g total_units=%g total_not_root_units=%g used_inodes_pct=%g free_inodes_pct=%g fsp.fsu_blocksize=%llu mult=%llu\n",
++          me->me_mountdir, path->dused_pct, path->dfree_pct, path->dused_units, path->dfree_units, path->dtotal_units, path->dtotal_not_root_units, path->dused_inodes_percent, path->dfree_inodes_percent, fsp.fsu_blocksize, mult);
+       }
+ 
+       /* Threshold comparisons */
+@@ -333,13 +333,13 @@
+         warning_high_tide = path->dtotal_units - path->freespace_units->warning->end;
+       }
+       if (path->freespace_percent->warning != NULL) {
+-        warning_high_tide = abs( min( (double) warning_high_tide, (double) (1.0 - path->freespace_percent->warning->end/100)*path->dtotal_units ));
++        warning_high_tide = abs( min( (double) warning_high_tide, (double) (1.0 - path->freespace_percent->warning->end/100)*path->dtotal_not_root_units ));
+       }
+       if (path->freespace_units->critical != NULL) {
+         critical_high_tide = path->dtotal_units - path->freespace_units->critical->end;
+       }
+       if (path->freespace_percent->critical != NULL) {
+-        critical_high_tide = abs( min( (double) critical_high_tide, (double) (1.0 - path->freespace_percent->critical->end/100)*path->dtotal_units ));
++        critical_high_tide = abs( min( (double) critical_high_tide, (double) (1.0 - path->freespace_percent->critical->end/100)*path->dtotal_not_root_units ));
+       }
+ 
+       /* Nb: *_high_tide are unset when == UINT_MAX */
+@@ -1015,6 +1015,7 @@
+           p->dused_units += p_list->dused_units;
+           p->dfree_units += p_list->dfree_units;
+           p->dtotal_units += p_list->dtotal_units;
++	  p->dtotal_not_root_units += p_list->dtotal_not_root_units;
+           p->inodes_total += p_list->inodes_total;
+           p->inodes_free  += p_list->inodes_free;
+         }
+@@ -1029,7 +1030,7 @@
+     p->best_match->me_mountdir = p->best_match->me_devname = p->group;
+   }
+   /* finally calculate percentages for either plain FS or summed up group */
+-  p->dused_pct = calculate_percent( p->used, p->used + p->available );	/* used + available can never be > uintmax */
++  p->dused_pct = calculate_percent( p->used, p->total_not_root );	/* used + available can never be > uintmax */
+   p->dfree_pct = 100 - p->dused_pct;
+   p->dused_inodes_percent = calculate_percent(p->inodes_total - p->inodes_free, p->inodes_total);
+   p->dfree_inodes_percent = 100 - p->dused_inodes_percent;
+@@ -1044,6 +1045,7 @@
+   p->available = fsp->fsu_bavail > fsp->fsu_bfree ? 0 : fsp->fsu_bavail;
+   p->available_to_root = fsp->fsu_bfree;
+   p->used = fsp->fsu_blocks - fsp->fsu_bfree;
++  p->total_not_root = p->used + p->available;
+   if (freespace_ignore_reserved) {
+     /* option activated : we substract the root-reserved space from the total */
+     p->total = fsp->fsu_blocks - p->available_to_root + p->available;
+@@ -1055,6 +1057,7 @@
+   p->dused_units = p->used*fsp->fsu_blocksize/mult;
+   p->dfree_units = p->available*fsp->fsu_blocksize/mult;
+   p->dtotal_units = p->total*fsp->fsu_blocksize/mult;
++  p->dtotal_not_root_units = p->total_not_root*fsp->fsu_blocksize/mult;
+   p->inodes_total = fsp->fsu_files;      /* Total file nodes. */
+   p->inodes_free  = fsp->fsu_ffree;      /* Free file nodes. */
+   np_add_name(&seen, p->best_match->me_mountdir);
+--- a/lib/utils_disk.c
++++ b/lib/utils_disk.c
+@@ -61,12 +61,14 @@
+   new_path->dfree_pct = -1;
+   new_path->dused_pct = -1; 
+   new_path->total = 0;
++  new_path->total_not_root = 0;
+   new_path->available = 0;
+   new_path->available_to_root = 0;
+   new_path->used = 0;
+   new_path->dused_units = 0;
+   new_path->dfree_units = 0;
+   new_path->dtotal_units = 0;
++  new_path->dtotal_not_root_units = 0;
+   new_path->inodes_total = 0;
+   new_path->inodes_free = 0;
+   new_path->dused_inodes_percent = 0;
+--- a/lib/utils_disk.h
++++ b/lib/utils_disk.h
+@@ -24,9 +24,9 @@
+   char *group;
+   struct mount_entry *best_match;
+   struct parameter_list *name_next;
+-  uintmax_t total, available, available_to_root, used, inodes_free, inodes_total;
++  uintmax_t total, total_not_root, available, available_to_root, used, inodes_free, inodes_total;
+   double dfree_pct, dused_pct;
+-  double dused_units, dfree_units, dtotal_units;
++  double dused_units, dfree_units, dtotal_units, dtotal_not_root_units;
+   double dused_inodes_percent, dfree_inodes_percent;
+ };
+ 

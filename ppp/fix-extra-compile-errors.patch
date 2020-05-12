@@ -1,0 +1,22 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Fix extra compile errors not caught by Debian's patches.
+ Their patches break/do not fix some other configurations.
+--- a/pppd/multilink.c
++++ b/pppd/multilink.c
+@@ -27,6 +27,11 @@
+  * AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
+  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
++
++#ifdef HAVE_MULTILINK
++/* Without MULTILINK, this file is syntactic garbage; e.g.
++ * 'bool doing_multilink;' will expand to 'bool 0;'. */
++
+ #include <string.h>
+ #include <ctype.h>
+ #include <stdlib.h>
+@@ -590,3 +595,4 @@
+ 	return 1;
+ }
+ 
++#endif

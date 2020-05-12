@@ -1,0 +1,14 @@
+Author: Maintenance <maintenance@smoothwall.net>
+Description: Unknown
+diff -NurbB squid-2.7.STABLE6/src/peer_sourcehash.c squid-2.7.STABLE6-patched/src/peer_sourcehash.c
+--- squid-2.7.STABLE6/src/peer_sourcehash.c	2006-05-16 05:52:26.000000000 +0100
++++ squid-2.7.STABLE6-patched/src/peer_sourcehash.c	2009-08-27 11:37:28.000000000 +0100
+@@ -136,7 +136,7 @@
+     double high_score = 0;
+     char *key = NULL;
+ 
+-    key = inet_ntoa(request->client_addr);
++    key = inet_ntoa(request->indirect_client_addr);
+ 
+     /* calculate hash key */
+     debug(39, 2) ("peerSourceHashSelectParent: Calculating hash for %s\n", key);

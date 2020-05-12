@@ -1,0 +1,22 @@
+Author: Nick Hollett <nick.hollett@smoothwall.net>
+Description: Increase the size of the URL Map, source cache and RTP Proxy list.
+This should allow for more simultaneous users and calls.
+--- a/src/siproxd.h
++++ b/src/siproxd.h
+@@ -279,13 +279,13 @@
+ #define TCP_IDLE_TO	300	/* TCP connection idle timeout in seconds */
+ #define TCP_CONNECT_TO	500	/* TCP connect() timeout in msec */
+ 
+-#define URLMAP_SIZE	128	/* number of URL mapping table entries	*/
++#define URLMAP_SIZE	256	/* number of URL mapping table entries	*/
+ 				/* this limits the number of clients!	*/
+ 
+-#define SOURCECACHE_SIZE 256	/* number of return addresses		*/
++#define SOURCECACHE_SIZE 512	/* number of return addresses		*/
+ #define DEJITTERLIMIT	1500000	/* max value for dejitter configuration */
+ 
+-#define RTPPROXY_SIZE	256	/* number of rtp proxy entries		*/
++#define RTPPROXY_SIZE	512	/* number of rtp proxy entries		*/
+ 				/* this limits the number of calls!	*/
+ 
+ #define BUFFER_SIZE	8196	/* input buffer for read from socket	*/

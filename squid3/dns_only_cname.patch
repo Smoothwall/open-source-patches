@@ -1,0 +1,31 @@
+Author: Stephen Baynes <stephen.baynes@smoothwall.net>
+Description: If a DNS server returns success but does not return any A[AAA]
+  records but does return some other record (eg a CNAME - more recent ADs with a
+  CNAME that does not further resolve), Squid would ignore result assuming it
+  was doing a recursive lookup, but that experemental code was removed some
+  time ago, so never happens and connexion hangs. Unconditionally use results
+  in all cases. See also http://bugs.squid-cache.org/show_bug.cgi?id=4007
+--- a/src/ipcache.cc
++++ b/src/ipcache.cc
+@@ -397,7 +397,7 @@
+         debugs(14, 9, HERE << "Unknown RR type received: type=" << answers[k].type << " starting at " << &(answers[k]) );
+     }
+     if (na == 0) {
+-        debugs(14, DBG_IMPORTANT, "ipcacheParse: No Address records in response to '" << name << "'");
++        debugs(14, DBG_CRITICAL, "ipcacheParse: No Address records in response to '" << name << "'");
+         i->error_message = xstrdup("No Address records");
+         if (cname_found)
+             ++IpcacheStats.cname_only;
+@@ -470,10 +470,10 @@
+     int done = ipcacheParse(i, answers, na, error_message);
+ 
+     /* If we have not produced either IPs or Error immediately, wait for recursion to finish. */
+-    if (done != 0 || error_message != NULL) {
++    //if (done != 0 || error_message != NULL) {
+         ipcacheAddEntry(i);
+         ipcacheCallback(i, age);
+-    }
++    //}
+ }
+ 
+ /**

@@ -1,0 +1,22 @@
+Author: Philip Boulain <philip.boulain@smoothwall.net>
+Description: Fix some POD errors that are breaking the build.
+--- a/ldirectord/ldirectord
++++ b/ldirectord/ldirectord
+@@ -316,7 +316,7 @@
+ =item * For all other services, the default is the empty string, in which
+ 	case authentication will not be attempted.
+ 
+-=back 4
++=back
+ 
+ B<passwd = ">I<password>B<">
+ 
+@@ -333,7 +333,7 @@
+ 	In the case of LDAP, MySQL and PostgreSQL this means
+ 	that authentication will not be performed.
+ 
+-=back 4
++=back
+ 
+ B<database = ">I<databasename>B<">
+ 

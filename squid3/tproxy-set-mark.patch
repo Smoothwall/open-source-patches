@@ -1,0 +1,17 @@
+Author: Daniel Collins <daniel.collins@smoothwall.net>
+Description: Set a mark on TPROXY connections which signals the SNAT code to
+ route/NAT the connection as if it were a forwarded connection.
+--- a/src/comm.cc
++++ b/src/comm.cc
+@@ -318,6 +318,11 @@
+     }
+     if (doneSuid)
+         leave_suid();
++
++    uint32_t mark = 0x00000080;
++    if (setsockopt(fd, SOL_SOCKET, SO_MARK, (char *) &mark, sizeof(mark)) < 0) {
++        debugs(50, DBG_IMPORTANT, "comm_open: setsockopt(SO_MARK) on FD " << fd << ": " << xstrerror());
++    }
+ #endif
+ }
+ 

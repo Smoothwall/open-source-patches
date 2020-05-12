@@ -1,0 +1,12 @@
+--- a/ntp_msg.c
++++ b/ntp_msg.c
+@@ -78,7 +78,9 @@
+ 			/* logging is futile */
+ 			return (-1);
+ 		}
++#if 0
+ 		log_warn("sendto");
++#endif
+ 		return (-1);
+ 	}
+ 

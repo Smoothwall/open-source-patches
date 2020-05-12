@@ -1,0 +1,18 @@
+Description: Add a whatis entry
+Origin: vendor
+Bug: https://rt.cpan.org/Ticket/Display.html?id=82393
+Forwarded: https://rt.cpan.org/Ticket/Display.html?id=82393
+Author: Jonathan Yu <frequency@cpan.org>
+Reviewed-By: Xavier Guimard <x.guimard@free.fr>
+Last-Update: 2013-01-04
+
+--- a/Coro/Intro.pod
++++ b/Coro/Intro.pod
+@@ -1,3 +1,7 @@
++=head1 NAME
++
++Coro::Intro - An introduction to Coro
++
+ =head1 Introduction to Coro
+ 
+ This tutorial will introduce you to the main features of the Coro module

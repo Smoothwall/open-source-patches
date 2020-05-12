@@ -1,0 +1,21 @@
+From: Daniel Kahn Gillmor <dkg@fifthhorseman.net>
+Date: Tue, 26 Sep 2017 02:34:01 -0400
+Subject: fix speling
+
+---
+ programs/pluto/ikev2_ipseckey.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/programs/pluto/ikev2_ipseckey.c b/programs/pluto/ikev2_ipseckey.c
+index 45872ef..5eb7ffe 100644
+--- a/programs/pluto/ikev2_ipseckey.c
++++ b/programs/pluto/ikev2_ipseckey.c
+@@ -175,7 +175,7 @@ static bool get_keyval_chunk(struct p_dns_req *dnsr, ldns_rdf *rdf,
+ 			&bin_len, err_buf, sizeof(err_buf), 0);
+ 
+ 	if (ugh != NULL) {
+-		loglog(RC_LOG_SERIOUS, "converting base64 pubkey to binary faild %s", ugh);
++		loglog(RC_LOG_SERIOUS, "converting base64 pubkey to binary failed %s", ugh);
+ 		ret = FALSE;
+ 	}
+ 

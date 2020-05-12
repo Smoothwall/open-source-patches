@@ -1,0 +1,25 @@
+Author: Harry Mason <harry.mason@smoothwall.net>
+Description: Force group domain prefixes on
+ This means that the canonical form of a group contains its domain
+ prefix, even if it's in the local domain. This keeps the syntax
+ consistent between local and trusted domains.
+--- a/source3/winbindd/winbindd_list_groups.c
++++ b/source3/winbindd/winbindd_list_groups.c
+@@ -169,7 +169,7 @@
+ 			fstring name;
+ 			fill_domain_username(name, d->domain->name,
+ 					     d->groups.principals[j].name,
+-					     True);
++					     False);
+ 			len += strlen(name)+1;
+ 		}
+ 		response->data.num_entries += d->groups.num_principals;
+@@ -189,7 +189,7 @@
+ 			size_t this_len;
+ 			fill_domain_username(name, d->domain->name,
+ 					     d->groups.principals[j].name,
+-					     True);
++					     False);
+ 			this_len = strlen(name);
+ 			memcpy(result+len, name, this_len);
+ 			len += this_len;
