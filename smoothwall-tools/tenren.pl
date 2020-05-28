@@ -11,7 +11,7 @@ use Privileges::Drop;
 use Data::Dumper;
 
 my $dry =1;
-my $bad_tenant = "6b2a";
+my $bad_tenant = "";
 
 my $tenfile = "/settings/tenants.json";
 my $poldir = "/modules/guardian3/settings/ui/main_policy";
@@ -96,6 +96,7 @@ for(keys %{$thash->{'data'}})
 				open (FH, ">", $newcatgfile) || die "cant open cat group file";
 				print FH encode_json($catghash);
 				close FH;
+				unlink($catgfile);
 			}
 		}		
 		else
