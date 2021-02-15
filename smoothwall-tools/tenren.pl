@@ -50,6 +50,7 @@ for(keys %{$thash->{'data'}})
 			my $newpol = $poldir . "/" . $newguid;
 			print STDERR "Moving $oldpol $newpol\n";
 			system("/bin/mv $oldpol $newpol") unless $dry;
+			system("/bin/sed -i 's/$oldguid/$newguid/g' $newpol") unless $dry;
 		}
 
 		#Cats
