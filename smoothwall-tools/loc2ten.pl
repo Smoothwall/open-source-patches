@@ -154,8 +154,7 @@ foreach(keys %replacements)
 			foreach(@{$replacements{$t}})
 			{
 				my ($one, $two) = split(",",$_);
-				$f =~ s/$one/$two/g;
-			
+				$f =~ s/$one([^\d])/$two$1/g;
 			}
 			if (!$dry)
 			{
