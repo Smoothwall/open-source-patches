@@ -107,12 +107,12 @@ Description: Adds an inout match module which matches any traffic leaving on the
 +
 +	if(info->test)
 +	{
-+		if(par->in == NULL || par->out == NULL)
++		if(xt_in(par) == NULL || xt_out(par) == NULL)
 +		{
 +			return false;
 +		}
 +
-+		bool same = (par->in->ifindex == par->out->ifindex);
++		bool same = (xt_in(par)->ifindex == xt_out(par)->ifindex);
 +		if(info->invert)
 +		{
 +			same = !same;

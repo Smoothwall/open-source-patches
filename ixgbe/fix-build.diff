@@ -1,0 +1,23 @@
+Author: Thomas Adam <thomas.adam@smoothwall.com>
+Description: Fix build for 3.18.X kernel
+--- a/src/kcompat.h
++++ b/src/kcompat.h
+@@ -5483,9 +5483,6 @@
+ #if (RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7,5))
+ #endif /* RHEL_RELEASE_CODE < RHEL7.5 */
+ 
+-#if RHEL_RELEASE_CODE && \
+-	RHEL_RELEASE_CODE > RHEL_RELEASE_VERSION(6,3) && \
+-	RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7,3)
+ static inline u64 ktime_get_ns(void)
+ {
+ 	return ktime_to_ns(ktime_get());
+@@ -5500,8 +5497,6 @@
+ {
+ 	return ktime_to_ns(ktime_get_boottime());
+ }
+-#endif /* RHEL < 7.3 */
+-
+ #else
+ #define HAVE_DCBNL_OPS_SETAPP_RETURN_INT
+ #include <linux/time64.h>

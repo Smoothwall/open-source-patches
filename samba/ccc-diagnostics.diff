@@ -1,0 +1,22 @@
+--- a/lib/util/util.c
++++ b/lib/util/util.c
+@@ -276,7 +276,8 @@
+ 	}
+ 	if (st.st_uid != uid && !uid_wrapper_enabled()) {
+ 		DEBUG(3, ("invalid ownership on directory "
+-			  "%s\n", dname));
++			  "%s -- compared uid %d to %d\n", dname,
++			  (long)uid, (long)st.st_uid));
+ 		return false;
+ 	}
+ 	if ((st.st_mode & 0777) != dir_perms) {
+--- a/source3/lib/messages.c
++++ b/source3/lib/messages.c
+@@ -292,6 +292,7 @@
+ 				 messaging_recv_cb, ctx);
+ 
+ 	if (ret != 0) {
++		// stat(2) the file...
+ 		DEBUG(2, ("messaging_dgm_init failed: %s\n", strerror(ret)));
+ 		TALLOC_FREE(ctx);
+ 		return NULL;

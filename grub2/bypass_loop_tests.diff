@@ -1,0 +1,29 @@
+Ignore ext234_test and fat_test due to docker build incompatibility
+--- a/tests/ext234_test.in
++++ b/tests/ext234_test.in
+@@ -2,6 +2,11 @@
+ 
+ set -e
+ 
++# Since the move to docker builds, these tests don't
++# work due to the inability to mount a loop device in /dev
++# during the docker build process
++exit 77
++
+ if [ "x$EUID" = "x" ] ; then
+   EUID=`id -u`
+ fi
+--- a/tests/fat_test.in
++++ b/tests/fat_test.in
+@@ -2,6 +2,11 @@
+ 
+ set -e
+ 
++# Since the move to docker builds, these tests don't
++# work due to the inability to mount a loop device in /dev
++# during the docker build process
++exit 77
++
+ if [ "x$EUID" = "x" ] ; then
+   EUID=`id -u`
+ fi
